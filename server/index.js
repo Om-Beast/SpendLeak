@@ -272,6 +272,7 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, { preferences: await updatePreferences(session.id, { currency, remindersEnabled }) });
   }
   if (method === 'POST' && pathname === '/api/ai/insights') {
+    rateLimit(request, 20, 'ai');
     const dashboard = buildDashboard(await listTransactions(session.id));
     const insights = await generateInsights(getSummaryForAI(dashboard));
     return sendJson(response, 200, { insights });
@@ -305,7 +306,7 @@ async function serveStatic(request, response, url) {
     response.writeHead(200, {
       'content-type': CONTENT_TYPES[path.extname(resolved)] || 'application/octet-stream',
       'content-length': fileStat.size,
-      'cache-control': path.extname(resolved) === '.html' ? 'no-cache' : 'public, max-age=3600'
+      'cache-control': (path.extname(resolved) === '.html' || pathname === '/sw.js') ? 'no-cache' : 'public, max-age=3600'
     });
     if (request.method === 'HEAD') return response.end();
     createReadStream(resolved).pipe(response);
