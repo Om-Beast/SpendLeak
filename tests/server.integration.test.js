@@ -118,3 +118,16 @@ test('logout revokes the session server-side', async () => {
   const profile = await apiRequest('/api/me', { cookie: account.cookie });
   assert.equal((await profile.json()).user, null);
 });
+
+
+test('account deletion requires password confirmation and revokes the current session', async () => {
+  const account = await signup('Delete User', 'delete-user@example.com');
+  const denied = await apiRequest('/api/account', { method: 'DELETE', cookie: account.cookie, body: { confirm: 'DELETE', password: 'WrongPassword123' } });
+  assert.equal(denied.status, 401);
+  const stillSignedIn = await apiRequest('/api/me', { cookie: account.cookie });
+  assert.equal((await stillSignedIn.json()).user.email, 'delete-user@example.com');
+  const deleted = await apiRequest('/api/account', { method: 'DELETE', cookie: account.cookie, body: { confirm: 'DELETE', password: 'GoodPassword123' } });
+  assert.equal(deleted.status, 200);
+  const after = await apiRequest('/api/me', { cookie: account.cookie });
+  assert.equal((await after.json()).user, null);
+});

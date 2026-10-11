@@ -220,3 +220,9 @@ export function getTableCounts(userId) {
     imports: Number(db.prepare('SELECT COUNT(*) AS count FROM imports WHERE user_id = ?').get(userId).count)
   };
 }
+
+
+// Permanently delete an account. SQLite foreign keys cascade to sessions and preferences.
+export function deleteUser(userId) {
+  return db.prepare('DELETE FROM users WHERE id = ?').run(userId).changes > 0;
+}

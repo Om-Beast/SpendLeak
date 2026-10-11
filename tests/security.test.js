@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hashPassword, verifyPassword, sha256, randomToken, cookieOptions, readCookie, validatePassword, makeFingerprint } from '../server/lib/security.js';
+import { hashPassword, verifyPassword, sha256, keyedHash, randomToken, cookieOptions, readCookie, validatePassword, makeFingerprint } from '../server/lib/security.js';
 
 test('password hash verifies only the original password', async () => {
   const hash = await hashPassword('spendleak-test-123');
@@ -13,6 +13,9 @@ test('session token helpers store token hashes and parse cookie safely', () => {
   assert.ok(token.length >= 40);
   assert.equal(sha256(token).length, 64);
   assert.equal(readCookie(`other=x; spendleak_session=${token}; theme=light`), token);
+  assert.equal(readCookie('spendleak_session=%E0%A4%A'), null);
+  assert.notEqual(keyedHash(token, 'secret-one'), keyedHash(token, 'secret-two'));
+  assert.equal(keyedHash(token, 'secret-one').length, 64);
   assert.match(cookieOptions(token, 300), /HttpOnly; SameSite=Strict; Path=\//);
   assert.match(cookieOptions(token, 300, true), /Secure/);
 });

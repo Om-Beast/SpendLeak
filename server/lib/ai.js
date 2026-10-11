@@ -1,5 +1,11 @@
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
+const ALLOWED_AI_CATEGORIES = new Map(['Home & bills','Shopping','Subscriptions','Income','Food & dining','Transport','Groceries','Entertainment','Utilities','Healthcare','Education','Travel','Other','Uncategorized'].map(name => [name.toLowerCase(), name]));
+function safeCategoryLabel(value) {
+  const label = String(value || '').normalize('NFKC').trim();
+  return ALLOWED_AI_CATEGORIES.get(label.toLowerCase()) || 'Other category';
+}
+
 function fallbackInsights(summary) {
   const insights = [];
   if (summary.monthChangePercent !== null && summary.monthChangePercent > 0) {
@@ -29,7 +35,7 @@ export async function generateInsights(summary) {
     recurringCount: summary.recurringCount,
     recurringEstimatedMonthlyCost: summary.recurringMonthlyCost,
     anomalyCount: summary.anomalyCount,
-    topCategories: summary.topCategories.map((category) => ({ name: category.name, sharePercent: category.sharePercent }))
+    topCategories: summary.topCategories.map((category) => ({ name: safeCategoryLabel(category.name), sharePercent: Math.max(0, Math.min(100, Number(category.sharePercent) || 0)) }))
   };
 
   try {
@@ -62,6 +68,6 @@ export function summarizeForAI(dashboard) {
     recurringMonthlyCost: (dashboard.summary.recurringMonthlyMinor / 100).toFixed(2),
     anomalyCount: dashboard.anomalies.length,
     topCategory: dashboard.categories[0] ? { name: dashboard.categories[0].name, sharePercent: dashboard.categories[0].sharePercent } : null,
-    topCategories: dashboard.categories.slice(0, 3).map(({ name, sharePercent }) => ({ name, sharePercent }))
+    topCategories: dashboard.categories.slice(0, 3).map(({ name, sharePercent }) => ({ name: safeCategoryLabel(name), sharePercent: Math.max(0, Math.min(100, Number(sharePercent) || 0)) }))
   };
 }

@@ -1,0 +1,25 @@
+# Zero-cost pilot configuration. Use with a Neon Free PostgreSQL database.
+# Create the Neon project separately, then set DATABASE_URL in Render's environment dashboard.
+# Do not store the connection string in this repository.
+services:
+  - type: web
+    name: spendleak-free-pilot
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: APP_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_POOL_SIZE
+        value: "5"

@@ -6,6 +6,10 @@ export function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+export function keyedHash(value, secret) {
+  return createHmac('sha256', secret).update(String(value)).digest('hex');
+}
+
 export async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   const key = await scrypt(password, salt, 64);
@@ -30,7 +34,8 @@ export function cookieOptions(token, maxAge, isProduction = false) {
 
 export function readCookie(cookieHeader = '', name = 'spendleak_session') {
   const part = cookieHeader.split(';').map((entry) => entry.trim()).find((entry) => entry.startsWith(`${name}=`));
-  return part ? decodeURIComponent(part.slice(name.length + 1)) : null;
+  if (!part) return null;
+  try { return decodeURIComponent(part.slice(name.length + 1)); } catch { return null; }
 }
 
 export function makeFingerprint(transaction) {
