@@ -1,14 +1,11 @@
-# Android / Play Store packaging
+# Zero-budget Android approach
 
-SpendLeak first becomes an installable Progressive Web App; a Trusted Web Activity (TWA) then packages the owned HTTPS experience in a verified Android shell. A TWA is not a native app rewrite, and it does not guarantee Play approval.
+Start with the installable Progressive Web App. It runs at the HTTPS URL, can be added to an Android home screen from Chrome, and does not require a paid app-store account.
 
-Only point the Android package to the verified production HTTPS host after managed PostgreSQL, backups, account deletion and security review are complete. Do not use the free SQLite demo as a real-user service.
+1. Deploy the free web service with Render and use Neon Free for PostgreSQL; do not rely on Render local SQLite storage.
+2. Install from Chrome menu → Install app / Add to Home screen.
+3. Test sign-up, login/logout, CSV file picker, export, account deletion, small screens, app resume and slow internet.
+4. The service worker caches only static public assets and never caches any `/api/*` financial data.
+5. Keep Gemini unconfigured for actual financial statements unless users have given clear consent to send aggregated spending metrics to Google's free-tier API (which may use content to improve products).
 
-On Windows:
-```powershell
-npm install -g @bubblewrap/cli
-bubblewrap init --manifest="https://YOUR-PRODUCTION-HOST/manifest.webmanifest"
-bubblewrap build
-```
-
-Review the generated package ID and SDK/target API (API 36+ for new submissions after 31 August 2026), icons and signing configuration. In Play Console App integrity, use the actual Play app-signing SHA-256 fingerprint and publish a matching /.well-known/assetlinks.json to the production host. Do not commit signing keys or passwords. Test import/export, account deletion and narrow screens on physical Android devices before internal/closed testing.
+**Play Store is not a $0 route for a new developer account.** Google currently lists a US$25 one-time Play Console developer registration fee. If the budget is strictly zero and there is no existing Play Console account, ship the installable PWA and share its URL/QR code first. If you later use Play Store, use Bubblewrap/TWA, target API 36+, secure the signing key and publish Digital Asset Links with the real Play app-signing certificate fingerprint. Store approval is not guaranteed.
