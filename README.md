@@ -156,7 +156,7 @@ A container definition is included. Set `NODE_ENV=production`, a strong random `
 
 ## Free deployment and Android install
 
-- `render.yaml` remains the free demo configuration. `render.production.yaml` is a separate **billable** web-service + PostgreSQL Blueprint. Review current Render pricing before explicitly applying it; it does not change the demo automatically.
+- `render.yaml` remains the original demo configuration. `render.free.yaml` is the free-first pilot: Render Free web service + externally managed Neon Free PostgreSQL. It creates no paid database, but free tiers have sleep/quota/reliability limits.
 - Read [`docs/PLAY_STORE_RELEASE.md`](docs/PLAY_STORE_RELEASE.md) for the zero-budget Render + Neon setup, safe-data checklist, PWA install and Play Store cost distinction.
 - Public pages: [Privacy Policy](/privacy.html), [Terms](/terms.html), [Account deletion](/delete-account.html).
 
