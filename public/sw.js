@@ -1,6 +1,6 @@
 /* Cache public app-shell assets only. Account and financial API data always stay network-only. */
 const CACHE_NAME = 'spendleak-shell-v1';
-const ASSETS = ['/offline.html', '/terms.html', '/styles.css', '/main.js', '/favicon.svg', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const ASSETS = ['/offline.html', '/terms.html', '/styles.css', '/main.js', '/favicon.svg', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
