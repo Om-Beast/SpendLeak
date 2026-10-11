@@ -154,10 +154,10 @@ A container definition is included. Set `NODE_ENV=production`, a strong random `
 - The first version stores one account and transaction ledger per user. It does not connect to banking APIs, convert currency, execute payments, or actually cancel subscriptions.
 - The browser reminder feature is an in-app prompt only; it is not a background notification worker.
 
-## Production and Play Store
+## Free deployment and Android install
 
 - `render.yaml` remains the free demo configuration. `render.production.yaml` is a separate **billable** web-service + PostgreSQL Blueprint. Review current Render pricing before explicitly applying it; it does not change the demo automatically.
-- Read [`docs/PLAY_STORE_RELEASE.md`](docs/PLAY_STORE_RELEASE.md) for the production safety checklist, data persistence, backup, Android/TWA and Play Console requirements.
+- Read [`docs/PLAY_STORE_RELEASE.md`](docs/PLAY_STORE_RELEASE.md) for the zero-budget Render + Neon setup, safe-data checklist, PWA install and Play Store cost distinction.
 - Public pages: [Privacy Policy](/privacy.html), [Terms](/terms.html), [Account deletion](/delete-account.html).
 
 ## Roadmap
