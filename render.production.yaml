@@ -1,0 +1,33 @@
+# OPTIONAL PAID production pilot. This file is separate from the free demo's render.yaml.
+# Review current Render pricing before applying. Do not use the free SQLite demo for real user data.
+services:
+  - type: web
+    name: spendleak-production
+    runtime: docker
+    plan: starter
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spendleak-production-db
+          property: connectionString
+      - key: APP_SECRET
+        generateValue: true
+      - key: DB_POOL_SIZE
+        value: "10"
+
+databases:
+  - name: spendleak-production-db
+    databaseName: spendleak
+    user: spendleak
+    plan: basic-256mb
+    region: singapore
