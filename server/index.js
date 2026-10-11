@@ -4,16 +4,17 @@ import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import {
+const databaseModule = process.env.DATABASE_URL ? await import('./database-postgres.js') : await import('./database.js');
+const {
   db, createUser, findUserByEmail, getPublicUser, saveSession, findSession,
   removeSession, removeExpiredSessions, insertTransactions, listTransactions,
-  importTransactionsOnce, saveImport, hasImported, removeTransaction, clearUserData, getPreferences,
-  updatePreferences, seedDemoData
-} from './database.js';
+  importTransactionsOnce, saveImport, hasImported, removeTransaction, clearUserData,
+  getPreferences, updatePreferences, seedDemoData, deleteUser
+} = databaseModule;
 import { parseTransactionsCsv } from './lib/csv.js';
 import { normalizeMerchant } from './lib/merchant.js';
 import { buildDashboard } from './lib/analysis.js';
-import { hashPassword, verifyPassword, sha256, randomToken, cookieOptions, readCookie, validatePassword } from './lib/security.js';
+import { hashPassword, verifyPassword, sha256, keyedHash, randomToken, cookieOptions, readCookie, validatePassword } from './lib/security.js';
 import { generateInsights, summarizeForAI } from './lib/ai.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -81,9 +82,9 @@ async function readJson(request) {
 function rateLimitKey(request) {
   return request.socket.remoteAddress || 'unknown';
 }
-function rateLimit(request, limit = 12) {
+function rateLimit(request, limit = 12, namespace = 'default') {
   const now = Date.now();
-  const key = rateLimitKey(request);
+  const key = namespace + ':' + rateLimitKey(request);
   const current = loginAttempts.get(key) || { count: 0, resetAt: now + 15 * 60_000 };
   if (current.resetAt <= now) { current.count = 0; current.resetAt = now + 15 * 60_000; }
   current.count += 1;
@@ -91,12 +92,13 @@ function rateLimit(request, limit = 12) {
   if (current.count > limit) throw Object.assign(new Error('Too many attempts. Please try again in 15 minutes.'), { status: 429 });
 }
 
-function getSession(request) {
+async function getSession(request) {
   const token = readCookie(request.headers.cookie || '');
   if (!token) return null;
-  const user = findSession(sha256(token));
+  const tokenHash = keyedHash(token, appSecret);
+  const user = await findSession(tokenHash);
   if (!user) return null;
-  return { ...user, tokenHash: sha256(token) };
+  return { ...user, tokenHash };
 }
 
 function requireUser(session) {
@@ -126,7 +128,7 @@ function getSummaryForAI(dashboard) {
 async function handleApi(request, response, url) {
   const method = request.method || 'GET';
   const pathname = url.pathname;
-  const session = getSession(request);
+  const session = await getSession(request);
 
   if (method !== 'GET' && method !== 'HEAD') {
     if (request.headers['sec-fetch-site'] === 'cross-site') {
@@ -146,18 +148,18 @@ async function handleApi(request, response, url) {
   if (method === 'GET' && pathname === '/api/health') return sendJson(response, 200, { status: 'ok', service: 'spendleak', version: '1.0.0' });
   if (method === 'GET' && pathname === '/api/me') {
     if (!session) return sendJson(response, 200, { user: null });
-    return sendJson(response, 200, { user: getPublicUser(session.id) });
+    return sendJson(response, 200, { user: await getPublicUser(session.id) });
   }
   if (method === 'POST' && pathname === '/api/demo') {
-    rateLimit(request, 10);
+    rateLimit(request, 10, 'demo');
     const id = randomUUID();
     const email = `demo-${id}@demo.spendleak.local`;
-    const user = createUser({ id, name: 'Demo Analyst', email, passwordHash: await hashPassword(`${randomUUID()}A1!`), isDemo: true });
-    seedDemoData(user.id);
+    const user = await createUser({ id, name: 'Demo Analyst', email, passwordHash: await hashPassword(`${randomUUID()}A1!`), isDemo: true });
+    await seedDemoData(user.id);
     return createLoginSession(response, user);
   }
   if (method === 'POST' && pathname === '/api/auth/signup') {
-    rateLimit(request);
+    rateLimit(request, 12, 'auth');
     const body = await readJson(request);
     const name = String(body.name || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
@@ -166,50 +168,62 @@ async function handleApi(request, response, url) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw Object.assign(new Error('Enter a valid email address.'), { status: 400 });
     const passwordError = validatePassword(password);
     if (passwordError) throw Object.assign(new Error(passwordError), { status: 400 });
-    if (findUserByEmail(email)) throw Object.assign(new Error('An account with this email already exists.'), { status: 409 });
-    const user = createUser({ name, email, passwordHash: await hashPassword(password) });
+    if (await findUserByEmail(email)) throw Object.assign(new Error('An account with this email already exists.'), { status: 409 });
+    const user = await createUser({ name, email, passwordHash: await hashPassword(password) });
     return createLoginSession(response, user, 201);
   }
   if (method === 'POST' && pathname === '/api/auth/login') {
-    rateLimit(request);
+    rateLimit(request, 12, 'auth');
     const body = await readJson(request);
     const email = String(body.email || '').trim();
     const password = typeof body.password === 'string' ? body.password : '';
-    const user = findUserByEmail(email);
+    const user = await findUserByEmail(email);
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       throw Object.assign(new Error('Email or password is incorrect.'), { status: 401 });
     }
     return createLoginSession(response, user);
   }
   if (method === 'POST' && pathname === '/api/auth/logout') {
-    if (session?.tokenHash) removeSession(session.tokenHash);
+    if (session?.tokenHash) await removeSession(session.tokenHash);
     response.setHeader('set-cookie', cookieOptions('', 0, IS_PRODUCTION));
     return sendJson(response, 200, { ok: true });
   }
 
   requireUser(session);
+  if (method === 'DELETE' && pathname === '/api/account') {
+    const body = await readJson(request);
+    if (body.confirm !== 'DELETE') throw Object.assign(new Error('Type DELETE to confirm permanent account deletion.'), { status: 400 });
+    if (!session.is_demo) {
+      const storedUser = await findUserByEmail(session.email);
+      const password = typeof body.password === 'string' ? body.password : '';
+      if (!storedUser || !(await verifyPassword(password, storedUser.password_hash))) throw Object.assign(new Error('Password confirmation failed.'), { status: 401 });
+    }
+    if (!(await deleteUser(session.id))) throw Object.assign(new Error('Account was not found.'), { status: 404 });
+    response.setHeader('set-cookie', cookieOptions('', 0, IS_PRODUCTION));
+    return sendJson(response, 200, { ok: true, message: 'Your account and app data have been deleted.' });
+  }
   if (method === 'GET' && pathname === '/api/dashboard') {
-    const transactions = listTransactions(session.id);
-    return sendJson(response, 200, { dashboard: buildDashboard(transactions), preferences: getPreferences(session.id) });
+    const transactions = await listTransactions(session.id);
+    return sendJson(response, 200, { dashboard: buildDashboard(transactions), preferences: await getPreferences(session.id) });
   }
   if (method === 'GET' && pathname === '/api/transactions') {
     const query = String(url.searchParams.get('q') || '').trim().toLowerCase().slice(0, 100);
     const direction = url.searchParams.get('direction');
     const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 200)));
-    let rows = listTransactions(session.id).reverse();
+    let rows = (await listTransactions(session.id)).reverse();
     if (query) rows = rows.filter((t) => `${t.description} ${t.merchant} ${t.category}`.toLowerCase().includes(query));
     if (direction === 'expense' || direction === 'income') rows = rows.filter((t) => t.direction === direction);
     return sendJson(response, 200, { transactions: rows.slice(0, limit), total: rows.length });
   }
   if (method === 'GET' && pathname === '/api/recurring') {
-    return sendJson(response, 200, { recurring: buildDashboard(listTransactions(session.id)).recurring });
+    return sendJson(response, 200, { recurring: buildDashboard(await listTransactions(session.id)).recurring });
   }
   if (method === 'GET' && pathname === '/api/anomalies') {
-    return sendJson(response, 200, { anomalies: buildDashboard(listTransactions(session.id)).anomalies });
+    return sendJson(response, 200, { anomalies: buildDashboard(await listTransactions(session.id)).anomalies });
   }
   if (method === 'GET' && pathname === '/api/export.csv') {
     const lines = [['Date', 'Description', 'Merchant', 'Amount', 'Direction', 'Category'].join(',')];
-    for (const transaction of listTransactions(session.id)) {
+    for (const transaction of await listTransactions(session.id)) {
       const values = [transaction.date, transaction.description, transaction.merchant, (transaction.amountMinor / 100).toFixed(2), transaction.direction, transaction.category];
       lines.push(values.map(csvCell).join(','));
     }
@@ -228,7 +242,7 @@ async function handleApi(request, response, url) {
     }
     let fileName = String(request.headers['x-file-name'] || 'transactions.csv');
     try { fileName = decodeURIComponent(fileName); } catch { /* Keep a malformed filename as a harmless string. */ }
-    const importResult = importTransactionsOnce(session.id, fileHash, fileName, parsed.transactions, parsed.transactions.length);
+    const importResult = await importTransactionsOnce(session.id, fileHash, fileName, parsed.transactions, parsed.transactions.length);
     if (importResult.alreadyImported) return sendJson(response, 200, { ok: true, alreadyImported: true, imported: 0, totalRows: parsed.totalRows, message: 'This exact CSV has already been imported.' });
     return sendJson(response, 201, {
       ok: true, imported: importResult.imported, totalRows: parsed.totalRows,
@@ -241,33 +255,34 @@ async function handleApi(request, response, url) {
   if (method === 'DELETE' && pathname.startsWith('/api/transactions/')) {
     const transactionId = decodeURIComponent(pathname.slice('/api/transactions/'.length));
     if (!transactionId || transactionId.length > 100) throw Object.assign(new Error('Invalid transaction id.'), { status: 400 });
-    if (!removeTransaction(session.id, transactionId)) throw Object.assign(new Error('Transaction was not found.'), { status: 404 });
+    if (!await removeTransaction(session.id, transactionId)) throw Object.assign(new Error('Transaction was not found.'), { status: 404 });
     return sendJson(response, 200, { ok: true });
   }
   if (method === 'DELETE' && pathname === '/api/data') {
-    clearUserData(session.id);
+    await clearUserData(session.id);
     return sendJson(response, 200, { ok: true, message: 'All imported transactions and import history were deleted.' });
   }
-  if (method === 'GET' && pathname === '/api/preferences') return sendJson(response, 200, { preferences: getPreferences(session.id) });
+  if (method === 'GET' && pathname === '/api/preferences') return sendJson(response, 200, { preferences: await getPreferences(session.id) });
   if (method === 'PATCH' && pathname === '/api/preferences') {
     const body = await readJson(request);
-    const currency = body.currency === undefined ? getPreferences(session.id).currency : String(body.currency);
+    const currentPreferences = await getPreferences(session.id);
+    const currency = body.currency === undefined ? currentPreferences.currency : String(body.currency);
     if (!['INR', 'USD', 'EUR', 'GBP'].includes(currency)) throw Object.assign(new Error('Unsupported display currency.'), { status: 400 });
-    const remindersEnabled = body.remindersEnabled === undefined ? Boolean(getPreferences(session.id).remindersEnabled) : Boolean(body.remindersEnabled);
-    return sendJson(response, 200, { preferences: updatePreferences(session.id, { currency, remindersEnabled }) });
+    const remindersEnabled = body.remindersEnabled === undefined ? Boolean(currentPreferences.remindersEnabled) : Boolean(body.remindersEnabled);
+    return sendJson(response, 200, { preferences: await updatePreferences(session.id, { currency, remindersEnabled }) });
   }
   if (method === 'POST' && pathname === '/api/ai/insights') {
-    const dashboard = buildDashboard(listTransactions(session.id));
+    const dashboard = buildDashboard(await listTransactions(session.id));
     const insights = await generateInsights(getSummaryForAI(dashboard));
     return sendJson(response, 200, { insights });
   }
   return sendJson(response, 404, { error: 'API route not found.' });
 }
 
-function createLoginSession(response, user, status = 200) {
+async function createLoginSession(response, user, status = 200) {
   const token = randomToken();
-  const tokenHash = sha256(token);
-  saveSession(tokenHash, user.id, Date.now() + SESSION_TTL_MS);
+  const tokenHash = keyedHash(token, appSecret);
+  await saveSession(tokenHash, user.id, Date.now() + SESSION_TTL_MS);
   response.setHeader('set-cookie', cookieOptions(token, Math.floor(SESSION_TTL_MS / 1000), IS_PRODUCTION));
   return sendJson(response, status, { user: { id: user.id, name: user.name, email: user.email, is_demo: user.is_demo ?? 0 } });
 }
@@ -275,7 +290,7 @@ function createLoginSession(response, user, status = 200) {
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',
-  '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json'
+  '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.json': 'application/json; charset=utf-8'
 };
 
 async function serveStatic(request, response, url) {
@@ -318,8 +333,8 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-removeExpiredSessions();
-setInterval(removeExpiredSessions, 60 * 60 * 1000).unref();
+await removeExpiredSessions();
+setInterval(() => { removeExpiredSessions().catch((error) => console.error('Expired-session cleanup failed:', error.message)); }, 60 * 60 * 1000).unref();
 setInterval(() => {
   const now = Date.now();
   for (const [key, value] of loginAttempts) if (value.resetAt <= now) loginAttempts.delete(key);
@@ -327,7 +342,7 @@ setInterval(() => {
 server.listen(PORT, HOST, () => console.log(`SpendLeak running at http://localhost:${PORT}`));
 
 function shutdown() {
-  server.close(() => { db.close(); process.exit(0); });
+  server.close(async () => { await db.close(); process.exit(0); });
   setTimeout(() => process.exit(1), 5000).unref();
 }
 process.on('SIGINT', shutdown);
