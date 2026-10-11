@@ -13,13 +13,14 @@ SpendLeak is a privacy-conscious, full-stack spending intelligence MVP. It accep
 - **Recurring payments:** estimated cadence, next expected date, confidence label, and rough annualized cost.
 - **Insights:** explainable flags for exact-pattern duplicate candidates and merchant charges materially above the historical median.
 - **Optional AI explanation:** click to explain aggregated totals and category shares in plain language. Without a `GEMINI_API_KEY`, a deterministic rules-based explanation works instead.
-- **Privacy controls:** cookie-backed sessions, account-scoped data, data deletion, and in-app reminder prompts.
+- **Privacy controls:** cookie-backed sessions, account-scoped data, workspace data clearing and permanent account deletion.
+- **Installable web app:** PWA manifest/icons and an online-first service worker that never caches `/api/*` responses.
 
 ## Tech stack
 
 - **Frontend:** semantic HTML, modern CSS, browser JavaScript modules (no build step or frontend runtime dependencies).
 - **Backend:** Node.js 22.9+, native HTTP server, small and explicit route handlers.
-- **Persistence:** SQLite through Node's built-in `node:sqlite` API.
+- **Persistence:** SQLite for local development and tests; managed PostgreSQL when `DATABASE_URL` is configured.
 - **AI:** optional Gemini REST API call with aggregate-only input and a deterministic fallback.
 - **Testing:** Node's built-in `node:test` runner.
 
@@ -144,7 +145,7 @@ A container definition is included. Set `NODE_ENV=production`, a strong random `
 
 ## Security notes / known limitations
 
-- Passwords use Node's `scrypt`; sessions use random bearer values stored only as SHA-256 hashes in SQLite and sent to the browser as `HttpOnly` cookies.
+- Passwords use Node's `scrypt`; sessions use random bearer values whose HMAC-SHA-256 hashes are stored server-side and sent to the browser as `HttpOnly` cookies.
 - Mutating requests reject cross-site Fetch Metadata and mismatched `Origin` values. Login/signup and demo creation are rate-limited by source address.
 - SQL operations use prepared statements; data endpoints filter by the authenticated user ID.
 - Security headers include a same-origin content security policy, clickjacking protection, and a restrictive permissions policy.
@@ -152,6 +153,12 @@ A container definition is included. Set `NODE_ENV=production`, a strong random `
 - The recurring and anomaly rules are deliberately conservative and explainable; they are not statistically certified and can create false positives/negatives.
 - The first version stores one account and transaction ledger per user. It does not connect to banking APIs, convert currency, execute payments, or actually cancel subscriptions.
 - The browser reminder feature is an in-app prompt only; it is not a background notification worker.
+
+## Production and Play Store
+
+- `render.yaml` remains the free demo configuration. `render.production.yaml` is a separate **billable** web-service + PostgreSQL Blueprint. Review current Render pricing before explicitly applying it; it does not change the demo automatically.
+- Read [`docs/PLAY_STORE_RELEASE.md`](docs/PLAY_STORE_RELEASE.md) for the production safety checklist, data persistence, backup, Android/TWA and Play Console requirements.
+- Public pages: [Privacy Policy](/privacy.html), [Terms](/terms.html), [Account deletion](/delete-account.html).
 
 ## Roadmap
 
