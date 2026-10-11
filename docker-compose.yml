@@ -1,0 +1,18 @@
+services:
+  spendleak:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATA_DIR: /data
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in your environment before running Compose}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+    volumes:
+      - spendleak-data:/data
+    restart: unless-stopped
+volumes:
+  spendleak-data:

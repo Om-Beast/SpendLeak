@@ -1,0 +1,22 @@
+# SpendLeak portfolio demo on Render.
+# Free instances have ephemeral storage: do not use real financial statements.
+services:
+  - type: web
+    name: spendleak
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATA_DIR
+        value: /data
+      - key: APP_SECRET
+        generateValue: true
