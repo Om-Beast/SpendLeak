@@ -8,3 +8,9 @@ data/
 *.sqlite-wal
 .DS_Store
 coverage/
+
+*.jks
+*.keystore
+local.properties
+service-account*.json
+android-twa/**/build/
