@@ -4,13 +4,28 @@
   "private": false,
   "description": "A privacy-first spending intelligence dashboard that finds recurring charges, unusual transactions, and possible duplicate payments.",
   "type": "module",
-  "engines": { "node": ">=22.9.0" },
+  "engines": {
+    "node": ">=22.9.0"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
     "dev": "node --env-file-if-exists=.env --watch server/index.js",
     "test": "node --test",
-    "check": "node --check server/index.js && node --check server/database.js && node --check server/lib/analysis.js && node --check server/lib/csv.js && node --check server/lib/security.js && node --check server/lib/ai.js && node --check public/main.js && node --test"
+    "check": "node --check server/index.js && node --check server/database.js && node --check server/database-postgres.js && node --check server/lib/analysis.js && node --check server/lib/csv.js && node --check server/lib/security.js && node --check server/lib/ai.js && node --check public/main.js && node --check public/sw.js && node --test"
   },
   "license": "MIT",
-  "keywords": ["personal-finance", "spending-analytics", "csv", "sqlite", "ai", "full-stack"]
+  "keywords": [
+    "personal-finance",
+    "spending-analytics",
+    "csv",
+    "sqlite",
+    "ai",
+    "full-stack",
+    "pwa",
+    "postgresql",
+    "privacy"
+  ],
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
 }
