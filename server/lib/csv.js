@@ -58,7 +58,10 @@ function parseRecords(text, delimiter) {
       throw new Error('Malformed CSV: unexpected characters after a quoted field.');
     }
 
-    if (char === '"' && field.trim() === '' && !quoteClosed) {
+    if (char === '"') {
+      if (field.trim() !== '' || quoteClosed) {
+        throw new Error('Malformed CSV: unexpected quote in an unquoted field.');
+      }
       field = '';
       quoted = true;
     } else if (char === delimiter) {
