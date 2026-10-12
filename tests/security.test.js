@@ -13,6 +13,8 @@ test('session token helpers store token hashes and parse cookie safely', () => {
   assert.ok(token.length >= 40);
   assert.equal(sha256(token).length, 64);
   assert.equal(readCookie(`other=x; spendleak_session=${token}; theme=light`), token);
+  assert.equal(readCookie('spendleak_session=%E0%A4%A'), null);
+  assert.equal(readCookie('spendleak_session=not-a-session-token'), null);
   assert.match(cookieOptions(token, 300), /HttpOnly; SameSite=Strict; Path=\//);
   assert.match(cookieOptions(token, 300, true), /Secure/);
 });
