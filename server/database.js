@@ -37,6 +37,14 @@ db.exec(`
     category TEXT NOT NULL DEFAULT 'Uncategorized',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS anomaly_reviews (
+    transaction_id TEXT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK(status IN ('reviewed', 'dismissed')),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_anomaly_reviews_user_status
+    ON anomaly_reviews(user_id, status);
   CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, transaction_date DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_user_merchant ON transactions(user_id, merchant);
   CREATE TABLE IF NOT EXISTS imports (
@@ -266,4 +274,32 @@ export function saveBudget(userId, category, monthlyLimitMinor) {
 
 export function removeBudget(userId, budgetId) {
   return db.prepare('DELETE FROM budgets WHERE id = ? AND user_id = ?').run(budgetId, userId).changes > 0;
+}
+
+
+export function listAnomalyReviews(userId) {
+  return db.prepare(`SELECT transaction_id AS transactionId, status,
+      updated_at AS updatedAt
+    FROM anomaly_reviews WHERE user_id = ?`)
+    .all(userId);
+}
+
+export function saveAnomalyReview(userId, transactionId, status) {
+  if (!['reviewed', 'dismissed'].includes(status)) return false;
+  const owned = db.prepare('SELECT id FROM transactions WHERE id = ? AND user_id = ?')
+    .get(transactionId, userId);
+  if (!owned) return false;
+  db.prepare(`INSERT INTO anomaly_reviews(transaction_id, user_id, status)
+    VALUES (?, ?, ?)
+    ON CONFLICT(transaction_id) DO UPDATE SET
+      status = excluded.status,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE anomaly_reviews.user_id = excluded.user_id`)
+    .run(transactionId, userId, status);
+  return true;
+}
+
+export function removeAnomalyReview(userId, transactionId) {
+  return db.prepare('DELETE FROM anomaly_reviews WHERE user_id = ? AND transaction_id = ?')
+    .run(userId, transactionId).changes > 0;
 }

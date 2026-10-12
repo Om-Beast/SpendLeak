@@ -9,7 +9,7 @@
     "start": "node --env-file-if-exists=.env server/index.js",
     "dev": "node --env-file-if-exists=.env --watch server/index.js",
     "test": "node --test",
-    "check": "node --check server/index.js && node --check server/database.js && node --check server/lib/analysis.js && node --check server/lib/budget.js && node --check server/lib/csv.js && node --check server/lib/security.js && node --check server/lib/ai.js && node --check public/main.js && node --test"
+    "check": "node --check server/index.js && node --check server/database.js && node --check server/lib/analysis.js && node --check server/lib/budget.js && node --check server/lib/reviews.js && node --check server/lib/csv.js && node --check server/lib/security.js && node --check server/lib/ai.js && node --check public/main.js && node --test"
   },
   "license": "MIT",
   "keywords": ["personal-finance", "spending-analytics", "csv", "sqlite", "ai", "full-stack"]
