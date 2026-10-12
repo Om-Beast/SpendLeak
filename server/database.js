@@ -103,7 +103,23 @@ export function removeSession(tokenHash) {
 }
 
 export function removeExpiredSessions() {
-  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
+  const now = Date.now();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+    // Demo accounts are disposable. Remove their seed data once no active
+    // session remains, including after a server restart or expired session.
+    db.prepare(`DELETE FROM users
+      WHERE is_demo = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM sessions
+          WHERE sessions.user_id = users.id AND sessions.expires_at > ?
+        )`).run(now);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 export function insertTransactions(userId, transactions) {
