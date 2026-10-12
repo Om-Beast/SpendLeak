@@ -6,6 +6,8 @@ const state = {
   preferences: { remindersEnabled: true, currency: 'INR' },
   section: 'overview',
   transactions: [],
+  budgets: [],
+  budgetPeriod: new Date().toISOString().slice(0, 7),
   transactionQuery: '',
   transactionDirection: 'all',
   importBusy: false,
@@ -93,6 +95,12 @@ async function loadDashboard() {
   const result = await api('/api/dashboard');
   state.dashboard = result.dashboard;
   state.preferences = result.preferences || state.preferences;
+  await loadBudgets().catch(() => { state.budgets = []; });
+}
+async function loadBudgets() {
+  const result = await api('/api/budgets');
+  state.budgets = result.budgets || [];
+  state.budgetPeriod = result.period || new Date().toISOString().slice(0, 7);
 }
 async function loadTransactions() {
   const params = new URLSearchParams({ limit: '500' });
@@ -153,6 +161,7 @@ function renderShell(content) {
     { id: 'overview', label: 'Overview', icon: 'overview' },
     { id: 'transactions', label: 'Transactions', icon: 'transactions' },
     { id: 'recurring', label: 'Recurring payments', icon: 'recurring', count: state.dashboard?.recurring?.length || 0 },
+    { id: 'budgets', label: 'Budget planner', icon: 'wallet', count: state.budgets?.length || 0 },
     { id: 'insights', label: 'Insights', icon: 'insights' }
   ];
   app.innerHTML = `
@@ -296,12 +305,38 @@ function renderSettings() {
     <section class="card settings-card danger-zone"><div class="settings-section-title"><span class="settings-icon danger">${icon('trash', 19)}</span><div><h2>Data controls</h2><p>These actions cannot be undone.</p></div></div><div class="setting-row"><div><b>Delete imported data</b><small>Remove all transactions and import history from this workspace. Your account will remain.</small></div><button class="button button-danger" data-action="clear-data">Delete all data</button></div></section></div>`;
 }
 
+
+function renderBudgets() {
+  const presets = ['Food & dining','Shopping','Transport','Home & bills','Subscriptions','Groceries','Entertainment','Other'];
+  const categories = [...new Set([...presets, ...(state.dashboard?.categories || []).map(x => x.name), ...state.budgets.map(x => x.category)])].sort((a,b)=>a.localeCompare(b));
+  const totalLimit = state.budgets.reduce((s,x)=>s+x.monthlyLimitMinor,0);
+  const totalSpent = state.budgets.reduce((s,x)=>s+x.spentMinor,0);
+  const remaining = totalLimit-totalSpent;
+  const cards = state.budgets.length ? state.budgets.map(item => {
+    const percent=Math.max(0,Math.min(100,item.usagePercent));
+    const status=item.isOverBudget ? \`Over by \${formatMoney(Math.abs(item.remainingMinor))}\` : \`\${formatMoney(item.remainingMinor)} left\`;
+    return \`<article class="budget-card">
+      <div class="budget-card-top"><span class="budget-category-icon">\${icon('wallet',18)}</span><div class="budget-title"><b>\${escapeHtml(item.category)}</b><small>\${escapeHtml(state.budgetPeriod)} · Monthly limit</small></div><div class="budget-actions"><button class="icon-button" data-action="edit-budget" data-category="\${escapeHtml(item.category)}" data-limit="\${item.monthlyLimitMinor}" type="button" title="Edit budget" aria-label="Edit budget">\${icon('settings',16)}</button><button class="icon-button budget-delete" data-action="delete-budget" data-id="\${escapeHtml(item.id)}" type="button" title="Delete budget" aria-label="Delete budget">\${icon('trash',16)}</button></div></div>
+      <div class="budget-numbers"><div><strong>\${formatMoney(item.spentMinor)}</strong><span>spent</span></div><div class="budget-limit"><strong>\${formatMoney(item.monthlyLimitMinor)}</strong><span>monthly budget</span></div></div>
+      <div class="budget-progress" role="progressbar" aria-label="\${escapeHtml(item.category)} budget usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="\${Math.max(0,item.usagePercent)}"><span class="\${item.isOverBudget?'over':item.usagePercent>=80?'near':''}" style="width:\${percent}%"></span></div>
+      <div class="budget-status \${item.isOverBudget?'over':item.usagePercent>=80?'near':''}"><span>\${item.usagePercent}% used</span><b>\${status}</b></div></article>\`;
+  }).join('') : \`<div class="budget-empty"><span>\${icon('wallet',25)}</span><b>Your first budget starts here</b><p>Choose a category and monthly limit. SpendLeak compares it with expenses from the current month.</p></div>\`;
+  return \`<section class="page-heading budget-page-heading"><div><div class="eyebrow subtle-eyebrow">PLAN WITH CLARITY</div><h1>Budget planner</h1><p>Set monthly limits and see how your tracked spending is progressing.</p></div><span class="budget-period-pill">\${escapeHtml(state.budgetPeriod)} · Current month</span></section>
+  <section class="budget-summary-grid"><article class="budget-summary-card"><span>Total monthly limits</span><strong>\${formatMoney(totalLimit)}</strong><small>Across \${state.budgets.length} categories</small></article><article class="budget-summary-card"><span>Tracked spend in budgeted categories</span><strong>\${formatMoney(totalSpent)}</strong><small>Current month, expenses only</small></article><article class="budget-summary-card \${remaining<0?'over':''}"><span>\${remaining<0?'Combined overage':'Budget remaining'}</span><strong>\${formatMoney(Math.abs(remaining))}</strong><small>Only categories with a saved budget</small></article></section>
+  <div class="budget-layout"><section class="budget-list-panel"><div class="budget-section-heading"><div><span class="section-kicker">YOUR LIMITS</span><h2>Category budgets</h2></div><span class="budget-count">\${state.budgets.length} set</span></div><div class="budget-card-list">\${cards}</div><div class="budget-footnote">\${icon('info',15)} Calculated from imported transactions with a matching category. This is not a live bank balance.</div></section>
+  <aside class="card budget-form-card"><div class="budget-form-icon">\${icon('sliders-horizontal',21)}</div><span class="section-kicker">MAKE A PLAN</span><h2 id="budget-form-title">Set a monthly limit</h2><p>Create a budget or choose an existing category to update its limit.</p><form id="budget-form">
+  <label class="field-label" for="budget-category">Spending category</label><input class="field-input" id="budget-category" name="category" list="budget-category-options" maxlength="48" placeholder="e.g. Food & dining" required/><datalist id="budget-category-options">\${categories.map(x=>\`<option value="\${escapeHtml(x)}"></option>\`).join('')}</datalist>
+  <label class="field-label" for="budget-limit">Monthly budget (₹)</label><div class="budget-amount-input"><span>₹</span><input class="field-input" id="budget-limit" name="monthlyLimit" type="number" min="1" max="1000000000" step="0.01" inputmode="decimal" placeholder="5000" required/></div>
+  <p class="budget-form-hint">Use the same category label as your transactions. You can update or remove a limit any time.</p><div class="budget-form-error" id="budget-error" role="alert" hidden></div><div class="budget-form-buttons"><button class="button button-primary button-full" id="budget-submit" type="submit">Save budget \${icon('chevron',16)}</button><button class="button button-secondary button-full" id="budget-cancel-edit" type="button" data-action="cancel-budget-edit" hidden>Cancel edit</button></div></form></aside></div>\`;
+}
+
 function showPage() {
   if (!state.user || !state.dashboard) return renderAuth();
   let content = '';
   if (state.section === 'overview') content = renderOverview();
   if (state.section === 'transactions') content = renderTransactions();
   if (state.section === 'recurring') content = renderRecurring();
+  if (state.section === 'budgets') content = renderBudgets();
   if (state.section === 'insights') content = renderInsights();
   if (state.section === 'settings') content = renderSettings();
   renderShell(content);
@@ -405,6 +440,7 @@ async function generateAI() {
 async function navigate(section) {
   state.section = section;
   if (section === 'transactions') await loadTransactions();
+  if (section === 'budgets') await loadBudgets();
   showPage();
   document.querySelector('#sidebar')?.classList.remove('sidebar-open');
   document.querySelector('.mobile-scrim')?.classList.remove('visible');
@@ -435,6 +471,41 @@ async function logout() {
   try { await api('/api/auth/logout', { method: 'POST', body: '{}' }); } catch { /* Local UI still clears if the network is unavailable. */ }
   state.user = null; state.dashboard = null; state.transactions = []; state.aiResult = null; state.section = 'overview'; state.authMode = 'login'; renderAuth();
 }
+
+async function submitBudget(form) {
+  const data=new FormData(form), category=String(data.get('category')||'').trim(), amount=Number(data.get('monthlyLimit'));
+  const error=form.querySelector('#budget-error'), button=form.querySelector('#budget-submit');
+  error.hidden=true;
+  if(!category||category.length>48||/[<>]/.test(category)){error.textContent='Enter a category name between 1 and 48 characters.';error.hidden=false;return;}
+  if(!Number.isFinite(amount)||amount<1||amount>1_000_000_000){error.textContent='Enter a monthly limit between ₹1 and ₹1,000,000,000.';error.hidden=false;return;}
+  button.disabled=true;button.classList.add('is-loading');
+  try {
+    await api('/api/budgets',{method:'POST',body:JSON.stringify({category,monthlyLimitMinor:Math.round(amount*100)})});
+    await loadBudgets();showPage();toast(\`Monthly budget saved for \${category}.\`);
+  } catch(err){error.textContent=err.message;error.hidden=false;}
+  finally{button.disabled=false;button.classList.remove('is-loading');}
+}
+async function deleteBudget(id) {
+  if(!confirm('Delete this category budget? Your transactions will not be changed.'))return;
+  try{await api(\`/api/budgets/\${encodeURIComponent(id)}\`,{method:'DELETE'});await loadBudgets();showPage();toast('Budget deleted.');}
+  catch(error){toast(error.message,'error');}
+}
+function editBudget(category,limitMinor) {
+  const form=document.querySelector('#budget-form');if(!form)return;
+  form.elements.category.value=category;form.elements.monthlyLimit.value=(Number(limitMinor)/100).toFixed(2);
+  document.querySelector('#budget-form-title').textContent='Update monthly limit';
+  document.querySelector('#budget-submit').innerHTML='Update budget '+icon('chevron',16);
+  document.querySelector('#budget-cancel-edit').hidden=false;document.querySelector('#budget-category').focus();
+  form.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function cancelBudgetEdit() {
+  const form=document.querySelector('#budget-form');if(!form)return;form.reset();
+  document.querySelector('#budget-form-title').textContent='Set a monthly limit';
+  document.querySelector('#budget-submit').innerHTML='Save budget '+icon('chevron',16);
+  document.querySelector('#budget-cancel-edit').hidden=true;
+  const error=document.querySelector('#budget-error');if(error)error.hidden=true;
+}
+
 async function deleteTransaction(id) {
   if (!confirm('Delete this transaction? This cannot be undone.')) return;
   try { await api(`/api/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadDashboard(); await loadTransactions(); showPage(); toast('Transaction deleted.'); }
@@ -492,6 +563,9 @@ app.addEventListener('click', async (event) => {
   else if (action === 'dismiss-ai') { state.aiResult = null; showPage(); }
   else if (action === 'logout') logout();
   else if (action === 'delete-transaction') deleteTransaction(control.dataset.id);
+  else if (action === 'edit-budget') editBudget(control.dataset.category, control.dataset.limit);
+  else if (action === 'delete-budget') deleteBudget(control.dataset.id);
+  else if (action === 'cancel-budget-edit') cancelBudgetEdit();
   else if (action === 'clear-data') clearData();
   else if (action === 'notifications') showUpcomingReminders();
   else if (action === 'toggle-sidebar') { document.querySelector('#sidebar')?.classList.toggle('sidebar-open'); document.querySelector('.mobile-scrim')?.classList.toggle('visible'); }
@@ -499,6 +573,7 @@ app.addEventListener('click', async (event) => {
 });
 app.addEventListener('submit', (event) => {
   if (event.target.id === 'auth-form') { event.preventDefault(); submitAuth(event.target); }
+  if (event.target.id === 'budget-form') { event.preventDefault(); submitBudget(event.target); }
 });
 app.addEventListener('input', onAppInput);
 app.addEventListener('change', onAppChange);
