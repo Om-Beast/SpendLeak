@@ -12,9 +12,10 @@ SpendLeak is a privacy-conscious, full-stack spending intelligence MVP. It accep
 - **Transactions:** search and filter the ledger, export the normalized data, and delete an individual row.
 - **Recurring payments:** estimated cadence, next expected date, confidence label, and rough annualized cost.
 - **Budgets:** set a monthly limit per category, track current-month spend against it, and see remaining/over-budget amounts. Budgets are private to the signed-in account.
-- **Insights:** explainable flags for exact-pattern duplicate candidates and merchant charges materially above the historical median.
+- **Insights:** explainable flags for exact-pattern duplicate candidates and merchant charges materially above the historical median. Mark a finding as reviewed or dismiss a false positive; review feedback is stored per account and can be reopened.
 - **Optional AI explanation:** click to explain aggregated totals and category shares in plain language. Without a `GEMINI_API_KEY`, a deterministic rules-based explanation works instead.
 - **Privacy controls:** cookie-backed sessions, account-scoped data, data deletion, and in-app reminder prompts.
+- **Insight feedback:** reviewed/dismissed states are user-scoped and cleared automatically when the source transaction is deleted.
 
 ## Tech stack
 
@@ -137,6 +138,8 @@ All endpoints are same-origin. Authenticated routes use the `HttpOnly`, `SameSit
 | `GET` | `/api/recurring` | Recurring pattern estimates |
 | `GET` | `/api/budgets` | Current-month budget progress |
 | `POST` | `/api/budgets` | Create or update a category budget |
+| `POST` | `/api/anomaly-reviews` | Save account-scoped reviewed/dismissed feedback for a transaction |
+| `DELETE` | `/api/anomaly-reviews/:transactionId` | Reopen a previously reviewed finding |
 | `DELETE` | `/api/budgets/:id` | Delete a budget owned by the current user |
 | `GET` | `/api/anomalies` | Explainable anomaly candidates |
 | `GET/PATCH` | `/api/preferences` | Read/update display and reminder settings |
