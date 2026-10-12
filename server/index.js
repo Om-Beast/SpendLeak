@@ -108,7 +108,10 @@ function requireUser(session) {
 }
 
 function csvCell(value) {
-  const text = String(value ?? '');
+  let text = String(value ?? '');
+  // Prevent spreadsheet programs from evaluating untrusted imported text as a
+  // formula when the user opens an export in Excel, Numbers, or Sheets.
+  if (/^[\\u0000-\\u0020\\uFEFF\\u200B]*[=+\\-@]/.test(text)) text = "'" + text;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
