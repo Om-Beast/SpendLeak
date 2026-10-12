@@ -165,3 +165,25 @@ test('account deletion removes owned data, revokes sessions, and releases the em
   })).json();
   assert.equal(freshDashboard.dashboard.summary.availableTransactions, 0);
 });
+
+test('demo workspaces are deleted on logout and their email is reusable', async () => {
+  const created = await apiRequest('/api/demo', { method: 'POST', body: {} });
+  assert.equal(created.status, 200);
+  const payload = await created.json();
+  const cookie = created.headers.get('set-cookie').split(';')[0];
+  assert.equal(payload.user.is_demo, 1);
+
+  const dashboard = await (await apiRequest('/api/dashboard', { cookie })).json();
+  assert.ok(dashboard.dashboard.summary.availableTransactions > 0);
+
+  const logout = await apiRequest('/api/auth/logout', { method: 'POST', body: {}, cookie });
+  assert.equal(logout.status, 200);
+  const signedOut = await (await apiRequest('/api/me', { cookie })).json();
+  assert.equal(signedOut.user, null);
+
+  const reuseEmail = await apiRequest('/api/auth/signup', {
+    method: 'POST',
+    body: { name: 'Fresh User', email: payload.user.email, password: 'GoodPassword123' }
+  });
+  assert.equal(reuseEmail.status, 201);
+});
