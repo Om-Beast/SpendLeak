@@ -342,7 +342,7 @@ function renderSettings() {
   return `<section class="page-heading"><div><div class="eyebrow subtle-eyebrow">YOUR DATA, YOUR CALL</div><h1>Settings & privacy</h1><p>Manage your preferences and choose what happens to your imported data.</p></div></section>
     <div class="settings-layout"><section class="card settings-card"><div class="settings-section-title"><span class="settings-icon">${icon('wallet', 19)}</span><div><h2>Workspace preferences</h2><p>Choose how amounts and reminders are shown.</p></div></div><div class="setting-row"><div><b>Display currency</b><small>Changes the displayed symbol. Does not convert underlying amounts.</small></div><select class="select-input" id="currency-select"><option value="INR" ${state.preferences.currency === 'INR' ? 'selected' : ''}>INR · Indian rupee</option><option value="USD" ${state.preferences.currency === 'USD' ? 'selected' : ''}>USD · US dollar</option><option value="EUR" ${state.preferences.currency === 'EUR' ? 'selected' : ''}>EUR · Euro</option><option value="GBP" ${state.preferences.currency === 'GBP' ? 'selected' : ''}>GBP · Pound sterling</option></select></div><div class="setting-row"><div><b>Reminder prompts</b><small>Show in-app reminders for estimated recurring payment dates.</small></div><label class="toggle"><input type="checkbox" id="reminders-toggle" ${state.preferences.remindersEnabled ? 'checked' : ''}/><span></span></label></div><div class="settings-note">${icon('info', 15)} Reminder dates are estimates based on past transactions. This MVP does not access bank accounts or send background SMS/email notifications.</div></section>
     <section class="card settings-card"><div class="settings-section-title"><span class="settings-icon blue">${icon('shield', 19)}</span><div><h2>Privacy & AI</h2><p>Understand what is stored and what leaves the server.</p></div></div><div class="privacy-bullet"><span>${icon('check', 16)}</span><div><b>No bank login connections</b><p>SpendLeak reads the CSV you choose to import; it never requests banking passwords, account numbers, or API access.</p></div></div><div class="privacy-bullet"><span>${icon('check', 16)}</span><div><b>AI is optional</b><p>Only when you click “Explain my spending” may aggregated totals, category labels, and counts be sent to Gemini. Raw descriptions and transaction dates are excluded.</p></div></div><div class="privacy-bullet"><span>${icon('check', 16)}</span><div><b>Server-side persistence</b><p>Transactions are saved in this app’s SQLite database, associated with your account. Use the data controls below to delete imports.</p></div></div></section>
-    <section class="card settings-card danger-zone"><div class="settings-section-title"><span class="settings-icon danger">${icon('trash', 19)}</span><div><h2>Data controls</h2><p>These actions cannot be undone.</p></div></div><div class="setting-row"><div><b>Delete imported data</b><small>Remove all transactions and import history from this workspace. Your account will remain.</small></div><button class="button button-danger" data-action="clear-data">Delete all data</button></div></section></div>`;
+    <section class="card settings-card danger-zone"><div class="settings-section-title"><span class="settings-icon danger">${icon('trash', 19)}</span><div><h2>Data controls</h2><p>These actions cannot be undone.</p></div></div><div class="setting-row"><div><b>Delete imported data</b><small>Remove all transactions and import history from this workspace. Your account will remain.</small></div><button class="button button-danger" data-action="clear-data">Delete all data</button></div><div class="setting-row account-delete-row"><div><b>Delete account permanently</b><small>Delete your account, sessions, transactions, budgets, preferences, and saved insight feedback.</small></div><button class="button button-danger" data-action="delete-account">Delete account</button></div></section></div>`;
 }
 
 
@@ -567,6 +567,21 @@ async function deleteTransaction(id) {
   try { await api(`/api/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadDashboard(); await loadTransactions(); showPage(); toast('Transaction deleted.'); }
   catch (error) { toast(error.message, 'error'); }
 }
+async function deleteAccount() {
+  if (!confirm('Permanently delete your SpendLeak account and all associated app data? This cannot be undone.')) return;
+  try {
+    await api('/api/account', { method: 'DELETE' });
+    state.user = null;
+    state.dashboard = null;
+    state.transactions = [];
+    state.budgets = [];
+    state.aiResult = null;
+    state.section = 'overview';
+    state.authMode = 'signup';
+    renderAuth();
+    toast('Account and associated app data deleted.');
+  } catch (error) { toast(error.message, 'error'); }
+}
 async function clearData() {
   if (!confirm('Delete every imported transaction and import history from this workspace? Your account will stay.')) return;
   try { await api('/api/data', { method: 'DELETE' }); state.aiResult = null; await loadDashboard(); await loadTransactions(); showPage(); toast('Imported data deleted.'); }
@@ -624,6 +639,7 @@ app.addEventListener('click', async (event) => {
   else if (action === 'review-anomaly') reviewAnomaly(control.dataset.id, control.dataset.status);
   else if (action === 'reopen-anomaly') reopenAnomaly(control.dataset.id);
   else if (action === 'cancel-budget-edit') cancelBudgetEdit();
+  else if (action === 'delete-account') deleteAccount();
   else if (action === 'clear-data') clearData();
   else if (action === 'notifications') showUpcomingReminders();
   else if (action === 'toggle-sidebar') { document.querySelector('#sidebar')?.classList.toggle('sidebar-open'); document.querySelector('.mobile-scrim')?.classList.toggle('visible'); }
