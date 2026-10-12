@@ -118,3 +118,50 @@ test('logout revokes the session server-side', async () => {
   const profile = await apiRequest('/api/me', { cookie: account.cookie });
   assert.equal((await profile.json()).user, null);
 });
+
+
+test('malformed session cookies are treated as signed out, not server errors', async () => {
+  const response = await apiRequest('/api/dashboard', { cookie: 'spendleak_session=%E0%A4%A' });
+  assert.equal(response.status, 401);
+  assert.match((await response.json()).error, /sign in/i);
+});
+
+test('account deletion removes owned data, revokes sessions, and releases the email', async () => {
+  const account = await signup('Delete Me', 'delete-me@example.com');
+  const csv = createSampleCsv();
+  const imported = await apiRequest('/api/import', {
+    method: 'POST',
+    cookie: account.cookie,
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'x-file-name': 'sample.csv' },
+    body: csv
+  });
+  assert.equal(imported.status, 201);
+
+  const budget = await apiRequest('/api/budgets', {
+    method: 'POST',
+    cookie: account.cookie,
+    body: { category: 'Food & dining', monthlyLimitMinor: 500000 }
+  });
+  assert.equal(budget.status, 200);
+  const before = await (await apiRequest('/api/dashboard', { cookie: account.cookie })).json();
+  assert.equal(before.dashboard.summary.availableTransactions, 7);
+
+  const deletion = await apiRequest('/api/account', { method: 'DELETE', cookie: account.cookie });
+  assert.equal(deletion.status, 200);
+  assert.match((await deletion.json()).message, /permanently deleted/i);
+
+  const oldSession = await (await apiRequest('/api/me', { cookie: account.cookie })).json();
+  assert.equal(oldSession.user, null);
+  const oldDashboard = await apiRequest('/api/dashboard', { cookie: account.cookie });
+  assert.equal(oldDashboard.status, 401);
+
+  const replacement = await apiRequest('/api/auth/signup', {
+    method: 'POST',
+    body: { name: 'Recreated User', email: 'delete-me@example.com', password: 'GoodPassword123' }
+  });
+  assert.equal(replacement.status, 201);
+  const freshDashboard = await (await apiRequest('/api/dashboard', {
+    cookie: replacement.headers.get('set-cookie').split(';')[0]
+  })).json();
+  assert.equal(freshDashboard.dashboard.summary.availableTransactions, 0);
+});
