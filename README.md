@@ -11,6 +11,7 @@ SpendLeak is a privacy-conscious, full-stack spending intelligence MVP. It accep
 - **Overview:** monthly spend, income, trends, categories, recent transactions, recurring estimates, and a review queue.
 - **Transactions:** search and filter the ledger, export the normalized data, and delete an individual row.
 - **Recurring payments:** estimated cadence, next expected date, confidence label, and rough annualized cost.
+- **Budgets:** set a monthly limit per category, track current-month spend against it, and see remaining/over-budget amounts. Budgets are private to the signed-in account.
 - **Insights:** explainable flags for exact-pattern duplicate candidates and merchant charges materially above the historical median.
 - **Optional AI explanation:** click to explain aggregated totals and category shares in plain language. Without a `GEMINI_API_KEY`, a deterministic rules-based explanation works instead.
 - **Privacy controls:** cookie-backed sessions, account-scoped data, data deletion, and in-app reminder prompts.
@@ -134,6 +135,9 @@ All endpoints are same-origin. Authenticated routes use the `HttpOnly`, `SameSit
 | `DELETE` | `/api/transactions/:id` | Delete one transaction |
 | `DELETE` | `/api/data` | Delete all user transaction/import data |
 | `GET` | `/api/recurring` | Recurring pattern estimates |
+| `GET` | `/api/budgets` | Current-month budget progress |
+| `POST` | `/api/budgets` | Create or update a category budget |
+| `DELETE` | `/api/budgets/:id` | Delete a budget owned by the current user |
 | `GET` | `/api/anomalies` | Explainable anomaly candidates |
 | `GET/PATCH` | `/api/preferences` | Read/update display and reminder settings |
 | `POST` | `/api/ai/insights` | Explicitly request a plain-English explanation |
