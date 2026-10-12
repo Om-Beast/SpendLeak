@@ -48,7 +48,7 @@ export function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 10 || password.length > 128) {
     return 'Password must be between 10 and 128 characters.';
   }
-  if (!/[A-Za-z]/.test(password) || !/\\d/.test(password)) return 'Use at least one letter and one number.';
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return 'Use at least one letter and one number.';
   return null;
 }
 
