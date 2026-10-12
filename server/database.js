@@ -54,6 +54,16 @@ db.exec(`
     currency TEXT NOT NULL DEFAULT 'INR',
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS budgets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category TEXT NOT NULL CHECK(length(trim(category)) BETWEEN 1 AND 48),
+    monthly_limit_minor INTEGER NOT NULL CHECK(monthly_limit_minor > 0),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_user_category
+    ON budgets(user_id, category COLLATE NOCASE);
 `);
 
 export function createUser({ id = randomUUID(), name, email, passwordHash, isDemo = false }) {
@@ -219,4 +229,41 @@ export function getTableCounts(userId) {
     transactions: Number(db.prepare('SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?').get(userId).count),
     imports: Number(db.prepare('SELECT COUNT(*) AS count FROM imports WHERE user_id = ?').get(userId).count)
   };
+}
+
+
+export function listBudgets(userId) {
+  return db.prepare(`SELECT id, category, monthly_limit_minor AS monthlyLimitMinor,
+      created_at AS createdAt, updated_at AS updatedAt
+    FROM budgets WHERE user_id = ? ORDER BY category COLLATE NOCASE ASC`)
+    .all(userId)
+    .map((row) => ({ ...row, monthlyLimitMinor: Number(row.monthlyLimitMinor) }));
+}
+
+export function saveBudget(userId, category, monthlyLimitMinor) {
+  // SQLite writes are synchronous here; the check-and-write remains in one
+  // transaction so concurrent requests cannot create duplicate category budgets.
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const existing = db.prepare('SELECT id FROM budgets WHERE user_id = ? AND category = ? COLLATE NOCASE')
+      .get(userId, category);
+    if (existing) {
+      db.prepare(`UPDATE budgets SET category = ?, monthly_limit_minor = ?,
+        updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`)
+        .run(category, monthlyLimitMinor, existing.id, userId);
+    } else {
+      db.prepare(`INSERT INTO budgets(id, user_id, category, monthly_limit_minor)
+        VALUES (?, ?, ?, ?)`)
+        .run(randomUUID(), userId, category, monthlyLimitMinor);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return listBudgets(userId).find((item) => item.category.toLowerCase() === category.toLowerCase()) || null;
+}
+
+export function removeBudget(userId, budgetId) {
+  return db.prepare('DELETE FROM budgets WHERE id = ? AND user_id = ?').run(budgetId, userId).changes > 0;
 }

@@ -8,13 +8,14 @@ import {
   db, createUser, findUserByEmail, getPublicUser, saveSession, findSession,
   removeSession, removeExpiredSessions, insertTransactions, listTransactions,
   importTransactionsOnce, saveImport, hasImported, removeTransaction, clearUserData, getPreferences,
-  updatePreferences, seedDemoData
+  updatePreferences, seedDemoData, listBudgets, saveBudget, removeBudget
 } from './database.js';
 import { parseTransactionsCsv } from './lib/csv.js';
 import { normalizeMerchant } from './lib/merchant.js';
 import { buildDashboard } from './lib/analysis.js';
 import { hashPassword, verifyPassword, sha256, randomToken, cookieOptions, readCookie, validatePassword } from './lib/security.js';
 import { generateInsights, summarizeForAI } from './lib/ai.js';
+import { calculateBudgetProgress } from './lib/budget.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(HERE, '../public');
@@ -247,6 +248,30 @@ async function handleApi(request, response, url) {
   if (method === 'DELETE' && pathname === '/api/data') {
     clearUserData(session.id);
     return sendJson(response, 200, { ok: true, message: 'All imported transactions and import history were deleted.' });
+  }
+  if (method === 'GET' && pathname === '/api/budgets') {
+    const period = new Date().toISOString().slice(0, 7);
+    const budgets = calculateBudgetProgress(listBudgets(session.id), listTransactions(session.id), period);
+    return sendJson(response, 200, { budgets, period });
+  }
+  if (method === 'POST' && pathname === '/api/budgets') {
+    const body = await readJson(request);
+    const category = typeof body.category === 'string' ? body.category.trim() : '';
+    const monthlyLimitMinor = Number(body.monthlyLimitMinor);
+    if (category.length < 1 || category.length > 48 || /[<>]/.test(category)) {
+      throw Object.assign(new Error('Category must be 1–48 characters.'), { status: 400 });
+    }
+    if (!Number.isSafeInteger(monthlyLimitMinor) || monthlyLimitMinor < 100 || monthlyLimitMinor > 100_000_000_000) {
+      throw Object.assign(new Error('Monthly budget must be between ₹1 and ₹1,000,000,000.'), { status: 400 });
+    }
+    const budget = saveBudget(session.id, category, monthlyLimitMinor);
+    return sendJson(response, 200, { budget, message: 'Monthly budget saved.' });
+  }
+  if (method === 'DELETE' && pathname.startsWith('/api/budgets/')) {
+    const budgetId = decodeURIComponent(pathname.slice('/api/budgets/'.length));
+    if (!budgetId || budgetId.length > 100) throw Object.assign(new Error('Invalid budget id.'), { status: 400 });
+    if (!removeBudget(session.id, budgetId)) throw Object.assign(new Error('Budget was not found.'), { status: 404 });
+    return sendJson(response, 200, { ok: true });
   }
   if (method === 'GET' && pathname === '/api/preferences') return sendJson(response, 200, { preferences: getPreferences(session.id) });
   if (method === 'PATCH' && pathname === '/api/preferences') {

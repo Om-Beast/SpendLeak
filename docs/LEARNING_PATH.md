@@ -69,3 +69,10 @@ Open `http://localhost:3000` and select **Explore the demo**. It creates a separ
 - Added an optional AI explanation endpoint that uses aggregated spending data with a deterministic fallback, plus 22 automated checks covering parser, algorithm, auth and API behavior.
 
 Only keep the test-count claim while `npm run check` continues to pass; update it when tests change. Do not claim measured user savings or production usage until you have real evidence.
+
+
+## Budget planner walkthrough
+
+The Budget Planner lets each signed-in account create one monthly limit per category. `server/database.js` persists limits with a unique `(user_id, category)` index. `server/lib/budget.js` compares current-period expense rows to those limits using integer minor currency units. Income is excluded, and uncategorized transactions count toward the explicit `Other` category. The API reads and writes budgets scoped to the authenticated session.
+
+For an interview, explain that budgets are not a live bank balance or a forecast. They describe imported transaction history for the current calendar month, so correctness depends on statement coverage and category labels.
