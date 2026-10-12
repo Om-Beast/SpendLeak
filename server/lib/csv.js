@@ -10,26 +10,76 @@ const HEADER_ALIASES = {
   category: ['category', 'expense category', 'spend category']
 };
 
-function splitLine(line, delimiter) {
-  const cells = [];
-  let current = '';
+const MAX_FILE_CHARS = 1_000_000;
+const MAX_ROWS = 10_000;
+const MAX_DESCRIPTION_LENGTH = 240;
+const MAX_CATEGORY_LENGTH = 60;
+const MAX_AMOUNT_MINOR = 100_000_000_00;
+
+/**
+ * Parse CSV records rather than splitting on newlines: valid quoted CSV cells
+ * can contain commas, quotes, CRLFs, and line breaks.
+ */
+function parseRecords(text, delimiter) {
+  const records = [];
+  let record = [];
+  let field = '';
   let quoted = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (char === '"') {
-      if (quoted && line[i + 1] === '"') { current += '"'; i += 1; }
-      else quoted = !quoted;
-    } else if (char === delimiter && !quoted) {
-      cells.push(current.trim()); current = '';
-    } else current += char;
+  let quoteClosed = false;
+
+  const pushField = () => {
+    record.push(field.trim());
+    field = '';
+    quoteClosed = false;
+  };
+  const pushRecord = () => {
+    pushField();
+    if (record.some((cell) => cell !== '')) records.push(record);
+    record = [];
+  };
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (quoted) {
+      if (char === '"' && text[i + 1] === '"') {
+        field += '"';
+        i += 1;
+      } else if (char === '"') {
+        quoted = false;
+        quoteClosed = true;
+      } else {
+        field += char;
+      }
+      continue;
+    }
+
+    if (quoteClosed && char !== delimiter && char !== '\r' && char !== '\n' && char !== ' ' && char !== '\t') {
+      throw new Error('Malformed CSV: unexpected characters after a quoted field.');
+    }
+
+    if (char === '"' && field.trim() === '' && !quoteClosed) {
+      field = '';
+      quoted = true;
+    } else if (char === delimiter) {
+      pushField();
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i + 1] === '\n') i += 1;
+      pushRecord();
+    } else if (!quoteClosed || (char !== ' ' && char !== '\t')) {
+      field += char;
+    }
   }
-  cells.push(current.trim());
-  return cells;
+
+  if (quoted) throw new Error('Malformed CSV: a quoted field was not closed.');
+  if (field !== '' || record.length > 0 || quoteClosed) pushRecord();
+  return records;
 }
 
-function detectDelimiter(firstLine) {
+function detectDelimiter(firstRecord) {
   const candidates = [',', ';', '\t', '|'];
-  return candidates.map((delimiter) => ({ delimiter, count: splitLine(firstLine, delimiter).length }))
+  return candidates
+    .map((delimiter) => ({ delimiter, count: parseRecords(firstRecord, delimiter)[0]?.length || 0 }))
     .sort((a, b) => b.count - a.count)[0].delimiter;
 }
 
@@ -44,49 +94,67 @@ function findColumn(headers, field) {
 function parseDate(value) {
   const text = String(value ?? '').trim();
   if (!text) return null;
+
   let year, month, day;
-  let match = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  let match = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:$|\s)/);
   if (match) [, year, month, day] = match;
+
   if (!match) {
-    match = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+    match = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:$|\s)/);
     if (match) {
       const first = Number(match[1]);
       const second = Number(match[2]);
-      // This product defaults ambiguous slash dates to Indian DD/MM/YYYY format.
+      // Ambiguous slash dates default to Indian DD/MM/YYYY format.
       if (first > 12) [, day, month, year] = match;
       else if (second > 12) [, month, day, year] = match;
       else [, day, month, year] = match;
     }
   }
+
   if (match) {
     const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
     if (date.getUTCFullYear() === Number(year) && date.getUTCMonth() === Number(month) - 1 && date.getUTCDate() === Number(day)) {
       return date.toISOString().slice(0, 10);
     }
+    return null;
   }
+
   const fallback = new Date(text);
   if (Number.isNaN(fallback.getTime())) return null;
   return fallback.toISOString().slice(0, 10);
 }
 
 function parseMoney(value) {
-  let text = String(value ?? '').trim().replace(/[₹$€£,\s]/g, '');
+  let text = String(value ?? '').trim();
   if (!text || text === '-' || text === '—') return null;
+
+  text = text.replace(/^(?:INR|RS\.?)[ \t]*/i, '');
+  text = text.replace(/[₹$€£,\s]/g, '');
   const parenthesesNegative = text.startsWith('(') && text.endsWith(')');
-  text = text.replace(/[()]/g, '').replace(/[^0-9.+-]/g, '');
+  if (parenthesesNegative) text = text.slice(1, -1);
+
+  // Reject malformed amounts instead of silently stripping arbitrary letters
+  // (e.g. "12abc34" must not become a valid amount of 1234).
+  if (!/^[+-]?(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(text)) return null;
   const parsed = Number(text);
   if (!Number.isFinite(parsed)) return null;
+
   const amount = Math.round(Math.abs(parsed) * 100);
   return { amountMinor: amount, wasNegative: parsed < 0 || parenthesesNegative };
 }
 
 export function parseTransactionsCsv(csvText) {
   if (typeof csvText !== 'string' || !csvText.trim()) throw new Error('The CSV file is empty.');
-  if (csvText.length > 1_000_000) throw new Error('Please upload a CSV smaller than 1 MB.');
-  const lines = csvText.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim() !== '');
-  if (lines.length < 2) throw new Error('Add a header row and at least one transaction.');
-  const delimiter = detectDelimiter(lines[0]);
-  const headers = splitLine(lines[0], delimiter);
+  if (csvText.length > MAX_FILE_CHARS) throw new Error('Please upload a CSV smaller than 1 MB.');
+
+  const text = csvText.replace(/^\uFEFF/, '');
+  const firstRecordEnd = text.search(/[\r\n]/);
+  const firstRecordText = firstRecordEnd === -1 ? text : text.slice(0, firstRecordEnd);
+  const delimiter = detectDelimiter(firstRecordText);
+  const records = parseRecords(text, delimiter);
+  if (records.length < 2) throw new Error('Add a header row and at least one transaction.');
+
+  const headers = records[0];
   const columns = Object.fromEntries(Object.keys(HEADER_ALIASES).map((field) => [field, findColumn(headers, field)]));
   if (columns.date < 0 || columns.description < 0 || (columns.amount < 0 && columns.debit < 0 && columns.credit < 0)) {
     throw new Error('Required columns not found. Include Date, Description and Amount (or Debit/Credit).');
@@ -94,41 +162,54 @@ export function parseTransactionsCsv(csvText) {
 
   const transactions = [];
   const errors = [];
-  const maxRows = Math.min(lines.length - 1, 10_000);
+  const availableRows = records.length - 1;
+  const maxRows = Math.min(availableRows, MAX_ROWS);
+
   for (let index = 1; index <= maxRows; index += 1) {
-    const cells = splitLine(lines[index], delimiter);
+    const cells = records[index];
+    const rowNumber = index + 1;
     const date = parseDate(cells[columns.date]);
-    const description = String(cells[columns.description] ?? '').trim().slice(0, 240);
-    const debitText = columns.debit >= 0 ? cells[columns.debit] : '';
-    const creditText = columns.credit >= 0 ? cells[columns.credit] : '';
-    const debit = parseMoney(debitText);
-    const credit = parseMoney(creditText);
+    const description = String(cells[columns.description] ?? '').trim().slice(0, MAX_DESCRIPTION_LENGTH);
+    const debit = columns.debit >= 0 ? parseMoney(cells[columns.debit]) : null;
+    const credit = columns.credit >= 0 ? parseMoney(cells[columns.credit]) : null;
     const generic = columns.amount >= 0 ? parseMoney(cells[columns.amount]) : null;
     const type = columns.type >= 0 ? String(cells[columns.type] ?? '').toLowerCase() : '';
 
     let amount = 0;
     let direction = 'expense';
     if (columns.debit >= 0 || columns.credit >= 0) {
-      if (credit?.amountMinor && credit.amountMinor > 0) { amount = credit.amountMinor; direction = 'income'; }
-      else if (debit?.amountMinor && debit.amountMinor > 0) { amount = debit.amountMinor; direction = 'expense'; }
+      if (credit?.amountMinor > 0) {
+        amount = credit.amountMinor;
+        direction = 'income';
+      } else if (debit?.amountMinor > 0) {
+        amount = debit.amountMinor;
+        direction = 'expense';
+      }
     } else if (generic) {
       amount = generic.amountMinor;
       if (/credit|salary|income|deposit|refund|received|cr\b/.test(type)) direction = 'income';
-      else if (/debit|expense|withdraw|paid|dr\b/.test(type)) direction = 'expense';
-      else direction = generic.wasNegative ? 'expense' : 'expense';
+      else direction = 'expense';
     }
 
-    if (!date || !description || !amount || !Number.isSafeInteger(amount) || amount > 100_000_000_00) {
-      errors.push({ row: index + 1, reason: 'Missing date/description or invalid amount.' });
+    if (!date || !description || !Number.isSafeInteger(amount) || amount <= 0 || amount > MAX_AMOUNT_MINOR) {
+      errors.push({ row: rowNumber, reason: 'Missing date/description or invalid amount.' });
       continue;
     }
+
     const merchant = normalizeMerchant(description);
-    const category = columns.category >= 0 ? (String(cells[columns.category] ?? '').trim().slice(0, 60) || 'Uncategorized') : 'Uncategorized';
+    const category = columns.category >= 0
+      ? (String(cells[columns.category] ?? '').trim().slice(0, MAX_CATEGORY_LENGTH) || 'Uncategorized')
+      : 'Uncategorized';
     transactions.push({ date, description, merchant, amountMinor: amount, direction, category });
   }
 
   if (!transactions.length) throw new Error('No valid transactions found. Check the date and amount formats.');
-  return { transactions, errors, skippedRows: lines.length - 1 - maxRows, totalRows: lines.length - 1 };
+  return {
+    transactions,
+    errors,
+    skippedRows: availableRows - maxRows,
+    totalRows: availableRows
+  };
 }
 
 export function createSampleCsv() {
