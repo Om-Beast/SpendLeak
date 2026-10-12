@@ -29,8 +29,14 @@ export function cookieOptions(token, maxAge, isProduction = false) {
 }
 
 export function readCookie(cookieHeader = '', name = 'spendleak_session') {
-  const part = cookieHeader.split(';').map((entry) => entry.trim()).find((entry) => entry.startsWith(`${name}=`));
-  return part ? decodeURIComponent(part.slice(name.length + 1)) : null;
+  const prefix = `${name}=`;
+  const part = cookieHeader.split(';').map((entry) => entry.trim()).find((entry) => entry.startsWith(prefix));
+  if (!part) return null;
+
+  // Session tokens are base64url, so percent-decoding is unnecessary. Reject
+  // unexpected cookie characters rather than throwing on malformed encodings.
+  const token = part.slice(prefix.length);
+  return /^[A-Za-z0-9_-]{40,100}$/.test(token) ? token : null;
 }
 
 export function makeFingerprint(transaction) {
@@ -42,7 +48,7 @@ export function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 10 || password.length > 128) {
     return 'Password must be between 10 and 128 characters.';
   }
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return 'Use at least one letter and one number.';
+  if (!/[A-Za-z]/.test(password) || !/\\d/.test(password)) return 'Use at least one letter and one number.';
   return null;
 }
 
