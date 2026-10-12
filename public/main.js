@@ -247,21 +247,21 @@ function renderBudgetSnapshot() {
   const content = items.length ? items.map((item) => {
     const percent = Math.max(0, Math.min(100, item.usagePercent));
     const rightText = item.isOverBudget
-      ? \`Over by \${formatMoney(Math.abs(item.remainingMinor))}\`
-      : \`\${formatMoney(item.remainingMinor)} left\`;
-    return \`<div class="budget-snapshot-row">
-      <div class="budget-snapshot-meta"><span>\${escapeHtml(item.category)}</span><b>\${formatMoney(item.spentMinor)} <small>of \${formatMoney(item.monthlyLimitMinor)}</small></b></div>
-      <div class="budget-snapshot-track" role="progressbar" aria-label="\${escapeHtml(item.category)} budget usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="\${Math.max(0, Math.min(100, item.usagePercent))}"><span class="\${item.isOverBudget ? 'over' : item.usagePercent >= 80 ? 'near' : ''}" style="width:\${percent}%"></span></div>
-      <div class="budget-snapshot-foot \${item.isOverBudget ? 'over' : item.usagePercent >= 80 ? 'near' : ''}"><span>\${item.usagePercent}% used</span><small>\${rightText}</small></div>
-    </div>\`;
-  }).join('') : \`<div class="budget-snapshot-empty"><b>Give your spending a plan</b><p>Set a monthly category limit and see your progress here, alongside your spending trends.</p></div>\`;
+      ? `Over by ${formatMoney(Math.abs(item.remainingMinor))}`
+      : `${formatMoney(item.remainingMinor)} left`;
+    return `<div class="budget-snapshot-row">
+      <div class="budget-snapshot-meta"><span>${escapeHtml(item.category)}</span><b>${formatMoney(item.spentMinor)} <small>of ${formatMoney(item.monthlyLimitMinor)}</small></b></div>
+      <div class="budget-snapshot-track" role="progressbar" aria-label="${escapeHtml(item.category)} budget usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, item.usagePercent))}"><span class="${item.isOverBudget ? 'over' : item.usagePercent >= 80 ? 'near' : ''}" style="width:${percent}%"></span></div>
+      <div class="budget-snapshot-foot ${item.isOverBudget ? 'over' : item.usagePercent >= 80 ? 'near' : ''}"><span>${item.usagePercent}% used</span><small>${rightText}</small></div>
+    </div>`;
+  }).join('') : `<div class="budget-snapshot-empty"><b>Give your spending a plan</b><p>Set a monthly category limit and see your progress here, alongside your spending trends.</p></div>`;
   const savedLimit = state.budgets.reduce((sum, item) => sum + item.monthlyLimitMinor, 0);
   const tracked = state.budgets.reduce((sum, item) => sum + item.spentMinor, 0);
-  return \`<section class="card budget-snapshot-card">
-    <div class="budget-snapshot-heading"><div><span class="section-kicker">A PLAN FOR THIS MONTH</span><h2>Budget pulse</h2><p>\${state.budgets.length ? \`\${state.budgets.length} category limits · \${formatMoney(Math.max(0, savedLimit - tracked))} remaining across budgeted categories\` : 'Set limits to make spending goals easier to follow.'}</p></div><button class="button button-secondary" type="button" data-action="navigate" data-section="budgets">\${state.budgets.length ? 'Manage budgets' : 'Set a budget'} \${icon('chevron', 15)}</button></div>
-    <div class="budget-snapshot-list">\${content}</div>
-    \${state.budgets.length > 3 ? \`<button class="inline-link budget-snapshot-more" data-action="navigate" data-section="budgets">View all \${state.budgets.length} budgets \${icon('chevron', 14)}</button>\` : ''}
-  </section>\`;
+  return `<section class="card budget-snapshot-card">
+    <div class="budget-snapshot-heading"><div><span class="section-kicker">A PLAN FOR THIS MONTH</span><h2>Budget pulse</h2><p>${state.budgets.length ? `${state.budgets.length} category limits · ${formatMoney(Math.max(0, savedLimit - tracked))} remaining across budgeted categories` : 'Set limits to make spending goals easier to follow.'}</p></div><button class="button button-secondary" type="button" data-action="navigate" data-section="budgets">${state.budgets.length ? 'Manage budgets' : 'Set a budget'} ${icon('chevron', 15)}</button></div>
+    <div class="budget-snapshot-list">${content}</div>
+    ${state.budgets.length > 3 ? `<button class="inline-link budget-snapshot-more" data-action="navigate" data-section="budgets">View all ${state.budgets.length} budgets ${icon('chevron', 14)}</button>` : ''}
+  </section>`;
 }
 
 function renderOverview() {
