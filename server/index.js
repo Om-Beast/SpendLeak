@@ -190,7 +190,11 @@ async function handleApi(request, response, url) {
     return createLoginSession(response, user);
   }
   if (method === 'POST' && pathname === '/api/auth/logout') {
-    if (session?.tokenHash) removeSession(session.tokenHash);
+    if (session?.tokenHash) {
+      // Demo workspaces contain synthetic rows only; remove them completely on logout.
+      if (session.is_demo) deleteAccount(session.id);
+      else removeSession(session.tokenHash);
+    }
     response.setHeader('set-cookie', cookieOptions('', 0, IS_PRODUCTION));
     return sendJson(response, 200, { ok: true });
   }
