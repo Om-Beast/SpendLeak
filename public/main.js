@@ -267,6 +267,7 @@ function renderBudgetSnapshot() {
 function renderOverview() {
   const dashboard = state.dashboard;
   const summary = dashboard.summary;
+  const openAnomalies = dashboard.anomalies.filter((item) => (item.reviewStatus || 'open') === 'open');
   const change = summary.monthChangePercent;
   const changeText = change === null ? '<span class="metric-neutral">—</span>' : `<span class="${change > 0 ? 'metric-up' : change < 0 ? 'metric-down' : 'metric-neutral'}">${change > 0 ? '↑' : change < 0 ? '↓' : '→'} ${Math.abs(change)}%</span>`;
   const firstName = (state.user?.name || 'there').split(/\s+/)[0];
@@ -276,7 +277,7 @@ function renderOverview() {
     <section class="metrics-grid" aria-label="Monthly summary">
       ${summaryMetric('Tracked spending', formatMoney(summary.currentSpendMinor, true), 'wallet', 'purple', changeText, change === null ? 'vs. last month' : `${Math.abs(change)}% vs. last month`)}
       ${summaryMetric('Recurring payments', formatMoney(summary.recurringMonthlyMinor, true), 'recurring', 'mint', `<span class="metric-neutral">${dashboard.recurring.length} found</span>`, 'estimated monthly')}
-      ${summaryMetric('Things to review', String(dashboard.anomalies.length).padStart(2, '0'), 'alert', 'peach', dashboard.anomalies.length ? '<span class="metric-attention">Worth a look</span>' : '<span class="metric-down">All clear</span>', 'unusual patterns')}
+      ${summaryMetric('Things to review', String(openAnomalies.length).padStart(2, '0'), 'alert', 'peach', openAnomalies.length ? '<span class="metric-attention">Worth a look</span>' : '<span class="metric-down">All clear</span>', 'unreviewed patterns')}
       ${summaryMetric('Transactions tracked', summary.availableTransactions.toLocaleString('en-IN'), 'transactions', 'blue', `<span class="metric-neutral">${summary.transactionCount} this month</span>`, 'across your imports')}
     </section>
     ${renderBudgetSnapshot()}
@@ -313,13 +314,28 @@ function renderRecurring() {
     <section class="privacy-note">${icon('info', 17)}<span><b>Estimates are not promises.</b> Payment dates can shift, cards can change, and merchants may use different descriptors. Confirm a subscription with the provider before making decisions.</span></section>`;
 }
 
+
+function renderInsightItem(item) {
+  const status = item.reviewStatus || 'open';
+  const reviewed = status !== 'open';
+  const controls = reviewed
+    ? `<div class="insight-review-actions"><span class="review-state-pill ${status}">${status === 'reviewed' ? 'Reviewed' : 'Dismissed as not relevant'}</span><button class="inline-link" data-action="reopen-anomaly" data-id="${escapeHtml(item.transactionId)}">Reopen ${icon('chevron',13)}</button></div>`
+    : `<div class="insight-review-actions"><button class="button button-secondary" type="button" data-action="review-anomaly" data-id="${escapeHtml(item.transactionId)}" data-status="reviewed">${icon('check',14)} Mark reviewed</button><button class="text-button" type="button" data-action="review-anomaly" data-id="${escapeHtml(item.transactionId)}" data-status="dismissed">Not relevant</button></div>`;
+  return `<article class="insight-item"><span class="insight-item-icon ${item.severity === 'high' ? 'danger' : item.type === 'possible_duplicate' ? 'orange' : 'purple'}">${icon(item.type === 'possible_duplicate' ? 'copy' : 'trend',19)}</span><div class="insight-item-content"><div class="insight-item-top"><h3>${escapeHtml(item.title)}</h3><span class="severity-pill ${item.severity}">${item.severity === 'high' ? 'Higher priority' : 'Review suggested'}</span></div><p>${escapeHtml(item.reason)}</p><div class="insight-evidence"><span>${icon('calendar',13)} ${formatDate(item.date)}</span><span>${icon('wallet',13)} ${escapeHtml(item.merchant)}</span><span>${icon('info',13)} ${item.type === 'possible_duplicate' ? 'Exact-pattern match' : 'Median-based comparison'}</span></div>${controls}</div><div class="insight-amount"><b>${formatMoney(item.amountMinor)}</b><button class="inline-link" data-action="navigate" data-section="transactions">View ledger ${icon('chevron',13)}</button></div></article>`;
+}
 function renderInsights() {
-  const anomalies = state.dashboard.anomalies;
-  return `<section class="page-heading"><div><div class="eyebrow subtle-eyebrow">PATTERNS WORTH A SECOND LOOK</div><h1>Insights</h1><p>Rule-based flags with the evidence behind them. You stay in control.</p></div><button class="button button-primary" data-action="generate-ai" ${state.aiBusy ? 'disabled' : ''}>${icon('sparkles', 16)} Explain my spending</button></section>
-    <section class="insight-hero"><div class="insight-hero-copy"><span class="eyebrow">A CLEARER PICTURE</span><h2>Small clues.<br/><span>Better questions.</span></h2><p>SpendLeak does not label a transaction as fraud. It looks for patterns that may deserve a closer look and shows why a pattern was flagged.</p><button class="button button-dark" data-action="navigate" data-section="transactions">Review transactions ${icon('chevron', 15)}</button></div><div class="insight-hero-stats"><div><span>Patterns found</span><b>${anomalies.length.toString().padStart(2, '0')}</b><small>across imported history</small></div><div><span>Recurring payments</span><b>${state.dashboard.recurring.length.toString().padStart(2, '0')}</b><small>estimated by cadence</small></div></div></section>
-    <section class="card insight-list-card"><div class="card-heading"><div><span class="section-kicker">REVIEW QUEUE</span><h2>Things to check</h2><p>Each finding links back to its source transaction.</p></div><span class="soft-pill">${anomalies.length} flags</span></div>${anomalies.length ? `<div class="insights-list">${anomalies.map((item) => `<article class="insight-item"><span class="insight-item-icon ${item.severity === 'high' ? 'danger' : item.type === 'possible_duplicate' ? 'orange' : 'purple'}">${icon(item.type === 'possible_duplicate' ? 'copy' : 'trend', 19)}</span><div class="insight-item-content"><div class="insight-item-top"><h3>${escapeHtml(item.title)}</h3><span class="severity-pill ${item.severity}">${item.severity === 'high' ? 'Higher priority' : 'Review suggested'}</span></div><p>${escapeHtml(item.reason)}</p><div class="insight-evidence"><span>${icon('calendar', 13)} ${formatDate(item.date)}</span><span>${icon('wallet', 13)} ${escapeHtml(item.merchant)}</span><span>${icon('info', 13)} ${item.type === 'possible_duplicate' ? 'Exact-pattern match' : 'Median-based comparison'}</span></div></div><div class="insight-amount"><b>${formatMoney(item.amountMinor)}</b><button class="inline-link" data-action="navigate" data-section="transactions">View ledger ${icon('chevron', 13)}</button></div></article>`).join('')}</div>` : `<div class="quiet-state large-quiet"><span class="quiet-icon">${icon('check', 22)}</span><div><b>No review flags in this dataset</b><p>That's good. New flags may appear as you import more history. A quiet result is not a guarantee that every transaction is correct.</p></div></div>`}</section>
+  const all = state.dashboard.anomalies;
+  const pending = all.filter((item) => (item.reviewStatus || 'open') === 'open');
+  const resolved = all.filter((item) => (item.reviewStatus || 'open') !== 'open');
+  const reviewedCount = resolved.filter((item) => item.reviewStatus === 'reviewed').length;
+  const dismissedCount = resolved.filter((item) => item.reviewStatus === 'dismissed').length;
+  const renderList = (items) => `<div class="insights-list">${items.map(renderInsightItem).join('')}</div>`;
+  return `<section class="page-heading"><div><div class="eyebrow subtle-eyebrow">PATTERNS WORTH A SECOND LOOK</div><h1>Insights</h1><p>Rule-based flags with the evidence behind them. You stay in control.</p></div><button class="button button-primary" data-action="generate-ai" ${state.aiBusy ? 'disabled' : ''}>${icon('sparkles',16)} Explain my spending</button></section>
+    <section class="insight-hero"><div class="insight-hero-copy"><span class="eyebrow">A CLEARER PICTURE</span><h2>Small clues.<br/><span>Better questions.</span></h2><p>SpendLeak does not label a transaction as fraud. It looks for patterns that may deserve a closer look and shows why a pattern was flagged.</p><button class="button button-dark" data-action="navigate" data-section="transactions">Review transactions ${icon('chevron',15)}</button></div><div class="insight-hero-stats"><div><span>Needs review</span><b>${pending.length.toString().padStart(2,'0')}</b><small>unreviewed flags</small></div><div><span>Closed by you</span><b>${resolved.length.toString().padStart(2,'0')}</b><small>${reviewedCount} reviewed · ${dismissedCount} dismissed</small></div></div></section>
+    <section class="card insight-list-card"><div class="card-heading"><div><span class="section-kicker">REVIEW QUEUE</span><h2>Things to check</h2><p>Dismiss false positives or mark a finding as reviewed. Nothing is deleted automatically.</p></div><span class="soft-pill">${pending.length} open</span></div>${pending.length ? renderList(pending) : `<div class="quiet-state large-quiet"><span class="quiet-icon">${icon('check',22)}</span><div><b>No findings waiting for review</b><p>All current flags are reviewed or dismissed. New flags may appear as more transaction history is imported. This is not a guarantee that every transaction is correct.</p></div></div>`}</section>
+    ${resolved.length ? `<details class="card resolved-insights"><summary>Previously reviewed or dismissed (${resolved.length})</summary><div class="resolved-insights-copy">${renderList(resolved)}</div></details>` : ''}
     ${state.aiResult ? renderAiResult() : ''}
-    <div class="inline-info">${icon('shield', 16)} These checks identify unusual patterns, not fraud. Verify transactions with your bank or merchant before taking action.</div>`;
+    <div class="inline-info">${icon('shield',16)} These checks identify unusual patterns, not fraud. Verify transactions with your bank or merchant before taking action.</div>`;
 }
 
 function renderSettings() {
@@ -509,6 +525,22 @@ async function submitBudget(form) {
   } catch(err){error.textContent=err.message;error.hidden=false;}
   finally{button.disabled=false;button.classList.remove('is-loading');}
 }
+async function reviewAnomaly(transactionId, status) {
+  try {
+    await api('/api/anomaly-reviews', { method: 'POST', body: JSON.stringify({ transactionId, status }) });
+    await loadDashboard();
+    showPage();
+    toast(status === 'reviewed' ? 'Finding marked as reviewed.' : 'Feedback saved. This finding is now dismissed.');
+  } catch (error) { toast(error.message, 'error'); }
+}
+async function reopenAnomaly(transactionId) {
+  try {
+    await api(`/api/anomaly-reviews/${encodeURIComponent(transactionId)}`, { method: 'DELETE' });
+    await loadDashboard();
+    showPage();
+    toast('Finding returned to the review queue.');
+  } catch (error) { toast(error.message, 'error'); }
+}
 async function deleteBudget(id) {
   if(!confirm('Delete this category budget? Your transactions will not be changed.'))return;
   try{await api(`/api/budgets/${encodeURIComponent(id)}`,{method:'DELETE'});await loadBudgets();showPage();toast('Budget deleted.');}
@@ -589,6 +621,8 @@ app.addEventListener('click', async (event) => {
   else if (action === 'delete-transaction') deleteTransaction(control.dataset.id);
   else if (action === 'edit-budget') editBudget(control.dataset.category, control.dataset.limit);
   else if (action === 'delete-budget') deleteBudget(control.dataset.id);
+  else if (action === 'review-anomaly') reviewAnomaly(control.dataset.id, control.dataset.status);
+  else if (action === 'reopen-anomaly') reopenAnomaly(control.dataset.id);
   else if (action === 'cancel-budget-edit') cancelBudgetEdit();
   else if (action === 'clear-data') clearData();
   else if (action === 'notifications') showUpcomingReminders();
