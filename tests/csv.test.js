@@ -12,9 +12,23 @@ test('parses sample CSV with expenses, income, and merchant cleanup', () => {
 });
 
 test('supports quoted commas and escaped quotes in descriptions', () => {
-  const result = parseTransactionsCsv('Date,Description,Amount,Type,Category\n2026-09-10,"CAFE, \"\"NORTH\"\"",250,Debit,"Food, dining"');
+  const result = parseTransactionsCsv('Date,Description,Amount,Type,Category\n2026-09-10,"CAFE, ""NORTH""",250,Debit,"Food, dining"');
   assert.equal(result.transactions[0].description, 'CAFE, "NORTH"');
   assert.equal(result.transactions[0].category, 'Food, dining');
+});
+
+test('supports multiline quoted fields and keeps them in one record', () => {
+  const result = parseTransactionsCsv('Date,Description,Amount\r\n2026-09-10,"CAFE NORTH\r\nBRANCH 2",250');
+  assert.equal(result.transactions.length, 1);
+  assert.equal(result.transactions[0].description, 'CAFE NORTH\r\nBRANCH 2');
+  assert.equal(result.totalRows, 1);
+});
+
+test('supports semicolon-delimited and tab-delimited files', () => {
+  const semicolon = parseTransactionsCsv('Date;Description;Amount\n2026-09-10;Cafe;250');
+  const tab = parseTransactionsCsv('Date\tDescription\tAmount\n2026-09-10\tCafe\t250');
+  assert.equal(semicolon.transactions[0].amountMinor, 25000);
+  assert.equal(tab.transactions[0].merchant, 'Cafe');
 });
 
 test('supports separate debit and credit columns', () => {
@@ -37,10 +51,20 @@ test('rejects empty files and unsupported headers', () => {
   assert.throws(() => parseTransactionsCsv('Name,Age\nRavi,22'), /Required columns/i);
 });
 
-
 test('ambiguous slash dates default to DD/MM/YYYY', () => {
   const result = parseTransactionsCsv('Date,Description,Amount\n05/10/2026,Shop,20');
   assert.equal(result.transactions[0].date, '2026-10-05');
+});
+
+test('rejects malformed money instead of coercing it into a different amount', () => {
+  const result = parseTransactionsCsv('Date,Description,Amount\n2026-09-10,Shop,12abc34\n2026-09-11,Cafe,"₹1,234.50"');
+  assert.equal(result.transactions.length, 1);
+  assert.equal(result.transactions[0].amountMinor, 123450);
+  assert.equal(result.errors.length, 1);
+});
+
+test('rejects unmatched quotes instead of persisting corrupt rows', () => {
+  assert.throws(() => parseTransactionsCsv('Date,Description,Amount\n2026-09-10,"Shop,20'), /quoted field was not closed/i);
 });
 
 test('rejects files above the documented import limit', () => {
