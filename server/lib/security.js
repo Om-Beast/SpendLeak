@@ -9,7 +9,7 @@ export function sha256(value) {
 export async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   const key = await scrypt(password, salt, 64);
-  return \`scrypt:\${salt}:\${Buffer.from(key).toString('hex')}\`;
+  return 'scrypt:' + salt + ':' + Buffer.from(key).toString('hex');
 }
 
 export async function verifyPassword(password, encoded) {
@@ -25,11 +25,11 @@ export function randomToken() {
 }
 
 export function cookieOptions(token, maxAge, isProduction = false) {
-  return \`spendleak_session=\${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=\${maxAge}\${isProduction ? '; Secure' : ''}\`;
+  return 'spendleak_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + maxAge + (isProduction ? '; Secure' : '');
 }
 
 export function readCookie(cookieHeader = '', name = 'spendleak_session') {
-  const prefix = \`\${name}=\`;
+  const prefix = name + '=';
   const part = cookieHeader.split(';').map((entry) => entry.trim()).find((entry) => entry.startsWith(prefix));
   if (!part) return null;
 
@@ -48,12 +48,12 @@ export function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 10 || password.length > 128) {
     return 'Password must be between 10 and 128 characters.';
   }
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return 'Use at least one letter and one number.';
+  if (!/[A-Za-z]/.test(password) || !/\\d/.test(password)) return 'Use at least one letter and one number.';
   return null;
 }
 
 export function signData(data, secret) {
   const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
   const signature = createHmac('sha256', secret).update(payload).digest('base64url');
-  return \`\${payload}.\${signature}\`;
+  return payload + '.' + signature;
 }
