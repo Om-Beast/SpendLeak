@@ -187,3 +187,21 @@ test('demo workspaces are deleted on logout and their email is reusable', async 
   });
   assert.equal(reuseEmail.status, 201);
 });
+
+test('CSV exports neutralize spreadsheet formulas in imported text fields', async () => {
+  const account = await signup('Export Safety', 'export-safety@example.com');
+  const csv = 'Date,Description,Amount,Type,Category\n2026-10-10,"=HYPERLINK(""https://example.com"",""click"")",1,Debit,"+SUM(1,1)"';
+  const imported = await apiRequest('/api/import', {
+    method: 'POST',
+    cookie: account.cookie,
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'x-file-name': 'formula-test.csv' },
+    body: csv
+  });
+  assert.equal(imported.status, 201);
+
+  const exported = await apiRequest('/api/export.csv', { cookie: account.cookie });
+  assert.equal(exported.status, 200);
+  const body = await exported.text();
+  assert.match(body, /"'=HYPERLINK/);
+  assert.match(body, /"'+SUM\(1,1\)"/);
+});
