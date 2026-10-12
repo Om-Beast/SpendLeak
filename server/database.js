@@ -303,3 +303,13 @@ export function removeAnomalyReview(userId, transactionId) {
   return db.prepare('DELETE FROM anomaly_reviews WHERE user_id = ? AND transaction_id = ?')
     .run(userId, transactionId).changes > 0;
 }
+
+
+/**
+ * Permanently delete a user account. Foreign-key cascades remove the account's
+ * sessions, imported transactions, import history, preferences, budgets, and
+ * any review feedback associated with those transactions.
+ */
+export function deleteAccount(userId) {
+  return db.prepare('DELETE FROM users WHERE id = ?').run(userId).changes > 0;
+}

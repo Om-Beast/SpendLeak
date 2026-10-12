@@ -14,7 +14,7 @@ SpendLeak is a privacy-conscious, full-stack spending intelligence MVP. It accep
 - **Budgets:** set a monthly limit per category, track current-month spend against it, and see remaining/over-budget amounts. Budgets are private to the signed-in account.
 - **Insights:** explainable flags for exact-pattern duplicate candidates and merchant charges materially above the historical median. Mark a finding as reviewed or dismiss a false positive; review feedback is stored per account and can be reopened.
 - **Optional AI explanation:** click to explain aggregated totals and category shares in plain language. Without a `GEMINI_API_KEY`, a deterministic rules-based explanation works instead.
-- **Privacy controls:** cookie-backed sessions, account-scoped data, data deletion, and in-app reminder prompts.
+- **Privacy controls:** cookie-backed sessions, account-scoped data, data deletion, permanent account deletion, and in-app reminder prompts.
 - **Insight feedback:** reviewed/dismissed states are user-scoped and cleared automatically when the source transaction is deleted.
 
 ## Tech stack
@@ -135,6 +135,7 @@ All endpoints are same-origin. Authenticated routes use the `HttpOnly`, `SameSit
 | `GET` | `/api/export.csv` | Export normalized transactions |
 | `DELETE` | `/api/transactions/:id` | Delete one transaction |
 | `DELETE` | `/api/data` | Delete all user transaction/import data |
+| `DELETE` | `/api/account` | Permanently delete the signed-in account and associated data |
 | `GET` | `/api/recurring` | Recurring pattern estimates |
 | `GET` | `/api/budgets` | Current-month budget progress |
 | `POST` | `/api/budgets` | Create or update a category budget |
