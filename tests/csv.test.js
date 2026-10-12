@@ -67,6 +67,10 @@ test('rejects unmatched quotes instead of persisting corrupt rows', () => {
   assert.throws(() => parseTransactionsCsv('Date,Description,Amount\n2026-09-10,"Shop,20'), /quoted field was not closed/i);
 });
 
+test('rejects quotes embedded in an unquoted field', () => {
+  assert.throws(() => parseTransactionsCsv('Date,Description,Amount\n2026-09-10,Shop "North",20'), /unexpected quote/i);
+});
+
 test('rejects files above the documented import limit', () => {
   assert.throws(() => parseTransactionsCsv('x'.repeat(1_000_001)), /smaller than 1 MB/i);
 });
