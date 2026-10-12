@@ -9,7 +9,7 @@ import {
   removeSession, removeExpiredSessions, insertTransactions, listTransactions,
   importTransactionsOnce, saveImport, hasImported, removeTransaction, clearUserData, getPreferences,
   updatePreferences, seedDemoData, listBudgets, saveBudget, removeBudget,
-  listAnomalyReviews, saveAnomalyReview, removeAnomalyReview
+  listAnomalyReviews, saveAnomalyReview, removeAnomalyReview, deleteAccount
 } from './database.js';
 import { parseTransactionsCsv } from './lib/csv.js';
 import { normalizeMerchant } from './lib/merchant.js';
@@ -280,6 +280,11 @@ async function handleApi(request, response, url) {
   if (method === 'DELETE' && pathname === '/api/data') {
     clearUserData(session.id);
     return sendJson(response, 200, { ok: true, message: 'All imported transactions and import history were deleted.' });
+  }
+  if (method === 'DELETE' && pathname === '/api/account') {
+    deleteAccount(session.id);
+    response.setHeader('set-cookie', cookieOptions('', 0, IS_PRODUCTION));
+    return sendJson(response, 200, { ok: true, message: 'Your account and associated app data were permanently deleted.' });
   }
   if (method === 'GET' && pathname === '/api/budgets') {
     const period = new Date().toISOString().slice(0, 7);
