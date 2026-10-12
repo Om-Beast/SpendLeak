@@ -241,6 +241,29 @@ function renderRecurringPreview(items) {
 function summaryMetric(label, value, iconName, color, trend, note) {
   return `<article class="metric-card"><div class="metric-card-top"><span>${escapeHtml(label)}</span><span class="metric-icon ${color}">${icon(iconName, 18)}</span></div><div class="metric-value">${value}</div><div class="metric-foot">${trend || ''}<span>${note}</span></div></article>`;
 }
+
+function renderBudgetSnapshot() {
+  const items = [...state.budgets].sort((a, b) => b.usagePercent - a.usagePercent).slice(0, 3);
+  const content = items.length ? items.map((item) => {
+    const percent = Math.max(0, Math.min(100, item.usagePercent));
+    const rightText = item.isOverBudget
+      ? `Over by ${formatMoney(Math.abs(item.remainingMinor))}`
+      : `${formatMoney(item.remainingMinor)} left`;
+    return `<div class="budget-snapshot-row">
+      <div class="budget-snapshot-meta"><span>${escapeHtml(item.category)}</span><b>${formatMoney(item.spentMinor)} <small>of ${formatMoney(item.monthlyLimitMinor)}</small></b></div>
+      <div class="budget-snapshot-track" role="progressbar" aria-label="${escapeHtml(item.category)} budget usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, item.usagePercent))}"><span class="${item.isOverBudget ? 'over' : item.usagePercent >= 80 ? 'near' : ''}" style="width:${percent}%"></span></div>
+      <div class="budget-snapshot-foot ${item.isOverBudget ? 'over' : item.usagePercent >= 80 ? 'near' : ''}"><span>${item.usagePercent}% used</span><small>${rightText}</small></div>
+    </div>`;
+  }).join('') : `<div class="budget-snapshot-empty"><b>Give your spending a plan</b><p>Set a monthly category limit and see your progress here, alongside your spending trends.</p></div>`;
+  const savedLimit = state.budgets.reduce((sum, item) => sum + item.monthlyLimitMinor, 0);
+  const tracked = state.budgets.reduce((sum, item) => sum + item.spentMinor, 0);
+  return `<section class="card budget-snapshot-card">
+    <div class="budget-snapshot-heading"><div><span class="section-kicker">A PLAN FOR THIS MONTH</span><h2>Budget pulse</h2><p>${state.budgets.length ? `${state.budgets.length} category limits · ${formatMoney(Math.max(0, savedLimit - tracked))} remaining across budgeted categories` : 'Set limits to make spending goals easier to follow.'}</p></div><button class="button button-secondary" type="button" data-action="navigate" data-section="budgets">${state.budgets.length ? 'Manage budgets' : 'Set a budget'} ${icon('chevron', 15)}</button></div>
+    <div class="budget-snapshot-list">${content}</div>
+    ${state.budgets.length > 3 ? `<button class="inline-link budget-snapshot-more" data-action="navigate" data-section="budgets">View all ${state.budgets.length} budgets ${icon('chevron', 14)}</button>` : ''}
+  </section>`;
+}
+
 function renderOverview() {
   const dashboard = state.dashboard;
   const summary = dashboard.summary;
@@ -256,6 +279,7 @@ function renderOverview() {
       ${summaryMetric('Things to review', String(dashboard.anomalies.length).padStart(2, '0'), 'alert', 'peach', dashboard.anomalies.length ? '<span class="metric-attention">Worth a look</span>' : '<span class="metric-down">All clear</span>', 'unusual patterns')}
       ${summaryMetric('Transactions tracked', summary.availableTransactions.toLocaleString('en-IN'), 'transactions', 'blue', `<span class="metric-neutral">${summary.transactionCount} this month</span>`, 'across your imports')}
     </section>
+    ${renderBudgetSnapshot()}
     <section class="main-grid dashboard-grid">
       <article class="card trend-card"><div class="card-heading"><div><span class="section-kicker">YOUR HISTORY</span><h2>Spending over time</h2><p>A six-month view of your outflow.</p></div><span class="period-chip">Last 6 months ${icon('down', 13)}</span></div><div class="chart-summary"><span>Total this month</span><b>${formatMoney(summary.currentSpendMinor)}</b>${change !== null ? `<span class="change-chip ${change > 0 ? 'change-negative' : 'change-positive'}">${change > 0 ? '+' : ''}${change}% <small>vs prior month</small></span>` : ''}</div>${renderTrendChart(dashboard.trend)}<div class="chart-footnote">${icon('info', 14)} Expenses only · Based on imported transactions</div></article>
       <article class="card category-card"><div class="card-heading"><div><span class="section-kicker">WHERE IT GOES</span><h2>Spending breakdown</h2><p>Current month by category.</p></div><button class="icon-button subtle-icon" title="View all transactions" data-action="navigate" data-section="transactions">${icon('more', 19)}</button></div>${renderCategories(dashboard.categories)}${dashboard.categories.length ? `<button class="inline-link" data-action="navigate" data-section="transactions">Explore transactions ${icon('chevron', 14)}</button>` : ''}</article>
