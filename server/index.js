@@ -8,7 +8,8 @@ import {
   db, createUser, findUserByEmail, getPublicUser, saveSession, findSession,
   removeSession, removeExpiredSessions, insertTransactions, listTransactions,
   importTransactionsOnce, saveImport, hasImported, removeTransaction, clearUserData, getPreferences,
-  updatePreferences, seedDemoData, listBudgets, saveBudget, removeBudget
+  updatePreferences, seedDemoData, listBudgets, saveBudget, removeBudget,
+  listAnomalyReviews, saveAnomalyReview, removeAnomalyReview
 } from './database.js';
 import { parseTransactionsCsv } from './lib/csv.js';
 import { normalizeMerchant } from './lib/merchant.js';
@@ -16,6 +17,7 @@ import { buildDashboard } from './lib/analysis.js';
 import { hashPassword, verifyPassword, sha256, randomToken, cookieOptions, readCookie, validatePassword } from './lib/security.js';
 import { generateInsights, summarizeForAI } from './lib/ai.js';
 import { calculateBudgetProgress } from './lib/budget.js';
+import { annotateAnomalies } from './lib/reviews.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(HERE, '../public');
@@ -124,6 +126,11 @@ function getSummaryForAI(dashboard) {
   return summarizeForAI(dashboard);
 }
 
+function attachAnomalyReviews(userId, dashboard) {
+  dashboard.anomalies = annotateAnomalies(dashboard.anomalies, listAnomalyReviews(userId));
+  return dashboard;
+}
+
 async function handleApi(request, response, url) {
   const method = request.method || 'GET';
   const pathname = url.pathname;
@@ -191,7 +198,8 @@ async function handleApi(request, response, url) {
   requireUser(session);
   if (method === 'GET' && pathname === '/api/dashboard') {
     const transactions = listTransactions(session.id);
-    return sendJson(response, 200, { dashboard: buildDashboard(transactions), preferences: getPreferences(session.id) });
+    const dashboard = attachAnomalyReviews(session.id, buildDashboard(transactions));
+    return sendJson(response, 200, { dashboard, preferences: getPreferences(session.id) });
   }
   if (method === 'GET' && pathname === '/api/transactions') {
     const query = String(url.searchParams.get('q') || '').trim().toLowerCase().slice(0, 100);
@@ -206,7 +214,31 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, { recurring: buildDashboard(listTransactions(session.id)).recurring });
   }
   if (method === 'GET' && pathname === '/api/anomalies') {
-    return sendJson(response, 200, { anomalies: buildDashboard(listTransactions(session.id)).anomalies });
+    const dashboard = attachAnomalyReviews(session.id, buildDashboard(listTransactions(session.id)));
+    return sendJson(response, 200, { anomalies: dashboard.anomalies });
+  }
+  if (method === 'POST' && pathname === '/api/anomaly-reviews') {
+    const body = await readJson(request);
+    const transactionId = typeof body.transactionId === 'string' ? body.transactionId.trim() : '';
+    const status = body.status;
+    if (!transactionId || transactionId.length > 100) {
+      throw Object.assign(new Error('Invalid transaction id.'), { status: 400 });
+    }
+    if (!['reviewed', 'dismissed'].includes(status)) {
+      throw Object.assign(new Error('Status must be reviewed or dismissed.'), { status: 400 });
+    }
+    if (!saveAnomalyReview(session.id, transactionId, status)) {
+      throw Object.assign(new Error('Transaction was not found in this workspace.'), { status: 404 });
+    }
+    return sendJson(response, 200, { ok: true, transactionId, status });
+  }
+  if (method === 'DELETE' && pathname.startsWith('/api/anomaly-reviews/')) {
+    const transactionId = decodeURIComponent(pathname.slice('/api/anomaly-reviews/'.length));
+    if (!transactionId || transactionId.length > 100) {
+      throw Object.assign(new Error('Invalid transaction id.'), { status: 400 });
+    }
+    removeAnomalyReview(session.id, transactionId);
+    return sendJson(response, 200, { ok: true });
   }
   if (method === 'GET' && pathname === '/api/export.csv') {
     const lines = [['Date', 'Description', 'Merchant', 'Amount', 'Direction', 'Category'].join(',')];
