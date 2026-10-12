@@ -203,5 +203,5 @@ test('CSV exports neutralize spreadsheet formulas in imported text fields', asyn
   assert.equal(exported.status, 200);
   const body = await exported.text();
   assert.match(body, /"'=HYPERLINK/);
-  assert.match(body, /"'+SUM\(1,1\)"/);
+  assert.match(body, /"'\+SUM\(1,1\)"/);
 });
