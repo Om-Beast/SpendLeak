@@ -205,3 +205,22 @@ test('CSV exports neutralize spreadsheet formulas in imported text fields', asyn
   assert.match(body, /"'=HYPERLINK/);
   assert.match(body, /"'\+SUM\(1,1\)"/);
 });
+
+
+test('serves the compiled React/TypeScript client and its static bundles', async () => {
+  const home = await apiRequest('/');
+  assert.equal(home.status, 200);
+  assert.match(home.headers.get('content-type') || '', /text\/html/);
+  const html = await home.text();
+  assert.match(html, /SpendLeak/);
+  assert.match(html, /type="module"/);
+  const scriptPath = html.match(/src="([^"]+\.js)"/)?.[1];
+  const stylePath = html.match(/href="([^"]+\.css)"/)?.[1];
+  assert.ok(scriptPath, 'built JavaScript bundle should be referenced by HTML');
+  assert.ok(stylePath, 'built CSS bundle should be referenced by HTML');
+  const [script, style] = await Promise.all([apiRequest(scriptPath), apiRequest(stylePath)]);
+  assert.equal(script.status, 200);
+  assert.match(script.headers.get('content-type') || '', /javascript/);
+  assert.equal(style.status, 200);
+  assert.match(style.headers.get('content-type') || '', /text\/css/);
+});

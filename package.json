@@ -1,16 +1,41 @@
 {
   "name": "spendleak",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": false,
-  "description": "A privacy-first spending intelligence dashboard that finds recurring charges, unusual transactions, and possible duplicate payments.",
+  "description": "A privacy-first AI-assisted spending analytics dashboard with deterministic recurring-payment and anomaly detection.",
   "type": "module",
-  "engines": { "node": ">=22.9.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
-    "dev": "node --env-file-if-exists=.env --watch server/index.js",
-    "test": "node --test",
-    "check": "node --check server/index.js && node --check server/database.js && node --check server/lib/analysis.js && node --check server/lib/budget.js && node --check server/lib/reviews.js && node --check server/lib/csv.js && node --check server/lib/security.js && node --check server/lib/ai.js && node --check public/main.js && node --test"
+    "dev": "vite --host 0.0.0.0",
+    "dev:api": "node --env-file-if-exists=.env --watch server/index.js",
+    "build": "tsc --noEmit && vite build",
+    "test": "npm run build && node --test",
+    "check": "node --check server/index.js && node --check server/database.js && node --check server/lib/analysis.js && node --check server/lib/budget.js && node --check server/lib/reviews.js && node --check server/lib/csv.js && node --check server/lib/security.js && node --check server/lib/ai.js && npm test"
+  },
+  "dependencies": {
+    "lucide-react": "0.468.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.0",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.0"
   },
   "license": "MIT",
-  "keywords": ["personal-finance", "spending-analytics", "csv", "sqlite", "ai", "full-stack"]
+  "keywords": [
+    "personal-finance",
+    "spending-analytics",
+    "react",
+    "typescript",
+    "csv",
+    "ai",
+    "full-stack"
+  ]
 }

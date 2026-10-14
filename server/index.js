@@ -20,7 +20,7 @@ import { calculateBudgetProgress } from './lib/budget.js';
 import { annotateAnomalies } from './lib/reviews.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC_DIR = path.resolve(HERE, '../public');
+const STATIC_DIR = path.resolve(HERE, '../dist');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -349,8 +349,8 @@ const CONTENT_TYPES = {
 
 async function serveStatic(request, response, url) {
   const pathname = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
-  const resolved = path.resolve(PUBLIC_DIR, `.${pathname}`);
-  if (!resolved.startsWith(`${PUBLIC_DIR}${path.sep}`) && resolved !== path.join(PUBLIC_DIR, 'index.html')) {
+  const resolved = path.resolve(STATIC_DIR, `.${pathname}`);
+  if (!resolved.startsWith(`${STATIC_DIR}${path.sep}`) && resolved !== path.join(STATIC_DIR, 'index.html')) {
     return sendJson(response, 403, { error: 'Invalid file path.' });
   }
   try {
